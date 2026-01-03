@@ -1,14 +1,19 @@
 import { usePlane } from "@react-three/cannon";
-import { Grid } from "@react-three/drei";
-import type * as THREE from "three";
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 
-// Visual arena radius (the petri dish)
+// Visual arena radius (the grassy meadow)
 const ARENA_RADIUS = 20;
 const ARENA_HEIGHT = 0.5;
+const DIRT_HEIGHT = 5;
+
+// Vegetation settings
+const GRASS_COUNT = 500;
+const ROCK_COUNT = 30;
 
 /**
  * Arena - The physical floor of the simulation
- * Visual: A flattened cylinder (radius 20) representing the petri dish
+ * Visual: A green grass platform with scattered vegetation
  * Physics: An infinite plane - blobs cannot fall off
  */
 export function Arena() {
@@ -20,6 +25,70 @@ export function Arena() {
 		position: [0, 0, 0],
 	}));
 
+	// Refs for instanced meshes
+	const grassRef = useRef<THREE.InstancedMesh>(null);
+	const rockRef = useRef<THREE.InstancedMesh>(null);
+
+	// Generate random positions for grass and rocks (once)
+	const grassPositions = useMemo(() => {
+		const positions: { x: number; z: number; rotY: number }[] = [];
+		for (let i = 0; i < GRASS_COUNT; i++) {
+			// Random position within arena (circular distribution)
+			const angle = Math.random() * Math.PI * 2;
+			const radius = Math.sqrt(Math.random()) * (ARENA_RADIUS - 0.5);
+			positions.push({
+				x: Math.cos(angle) * radius,
+				z: Math.sin(angle) * radius,
+				rotY: Math.random() * Math.PI * 2,
+			});
+		}
+		return positions;
+	}, []);
+
+	const rockData = useMemo(() => {
+		const data: { x: number; z: number; rotY: number; scale: number }[] = [];
+		for (let i = 0; i < ROCK_COUNT; i++) {
+			const angle = Math.random() * Math.PI * 2;
+			const radius = Math.sqrt(Math.random()) * (ARENA_RADIUS - 1);
+			data.push({
+				x: Math.cos(angle) * radius,
+				z: Math.sin(angle) * radius,
+				rotY: Math.random() * Math.PI * 2,
+				scale: 0.5 + Math.random(), // 0.5 to 1.5
+			});
+		}
+		return data;
+	}, []);
+
+	// Set up instanced mesh transforms
+	useEffect(() => {
+		if (!grassRef.current) return;
+
+		const dummy = new THREE.Object3D();
+		for (const [i, pos] of grassPositions.entries()) {
+			dummy.position.set(pos.x, ARENA_HEIGHT / 2 + 0.2, pos.z);
+			dummy.rotation.set(0, pos.rotY, 0);
+			dummy.scale.setScalar(1);
+			dummy.updateMatrix();
+			grassRef.current.setMatrixAt(i, dummy.matrix);
+		}
+		grassRef.current.instanceMatrix.needsUpdate = true;
+	}, [grassPositions]);
+
+	useEffect(() => {
+		if (!rockRef.current) return;
+
+		const dummy = new THREE.Object3D();
+		for (const [i, rock] of rockData.entries()) {
+			dummy.position.set(rock.x, ARENA_HEIGHT / 2 + 0.1, rock.z);
+			dummy.rotation.set(0, rock.rotY, 0);
+			dummy.scale.setScalar(rock.scale);
+			dummy.updateMatrix();
+			rockRef.current.setMatrixAt(i, dummy.matrix);
+		}
+		rockRef.current.instanceMatrix.needsUpdate = true;
+	}, [rockData]);
+
 	return (
 		<group>
 			{/* Invisible physics floor (infinite plane) */}
@@ -28,43 +97,46 @@ export function Arena() {
 				<meshBasicMaterial visible={false} />
 			</mesh>
 
-			{/* Infinite Grid - Lab space illusion below the petri dish */}
-			<Grid
-				position={[0, -0.01, 0]}
-				args={[200, 200]}
-				cellSize={1}
-				cellThickness={0.5}
-				cellColor="#d0d0d0"
-				sectionSize={5}
-				sectionThickness={1}
-				sectionColor="#b0b0b0"
-				fadeDistance={80}
-				fadeStrength={1}
-				followCamera={false}
-				infiniteGrid
-			/>
-
-			{/* Visual Arena Floor - Petri Dish */}
+			{/* Visual Arena Floor - Green Grass Platform (Toon shaded) */}
 			<mesh position={[0, 0, 0]} receiveShadow>
 				<cylinderGeometry
 					args={[ARENA_RADIUS, ARENA_RADIUS, ARENA_HEIGHT, 64]}
 				/>
-				<meshStandardMaterial
-					color="#b0b0b0"
-					roughness={0.8}
-					metalness={0.02}
-				/>
+				<meshToonMaterial color="#4ade80" />
 			</mesh>
 
-			{/* Safe Zone Rim - Visual boundary indicator */}
+			{/* Dirt Layer - Extends below the grass to create floating island depth */}
 			<mesh
-				position={[0, ARENA_HEIGHT / 2 + 0.05, 0]}
-				rotation={[-Math.PI / 2, 0, 0]}
+				position={[0, -(ARENA_HEIGHT / 2 + DIRT_HEIGHT / 2), 0]}
 				receiveShadow
 			>
-				<torusGeometry args={[ARENA_RADIUS - 0.5, 0.15, 16, 64]} />
-				<meshStandardMaterial color="#e0e0e0" roughness={0.7} metalness={0.1} />
+				<cylinderGeometry
+					args={[ARENA_RADIUS, ARENA_RADIUS * 0.85, DIRT_HEIGHT, 64]}
+				/>
+				<meshToonMaterial color="#5D4037" />
 			</mesh>
+
+			{/* Grass Tufts - Instanced cones */}
+			<instancedMesh
+				ref={grassRef}
+				args={[undefined, undefined, GRASS_COUNT]}
+				castShadow
+				receiveShadow
+			>
+				<coneGeometry args={[0.1, 0.4, 4]} />
+				<meshStandardMaterial color="#22c55e" flatShading />
+			</instancedMesh>
+
+			{/* Rocks - Instanced dodecahedrons */}
+			<instancedMesh
+				ref={rockRef}
+				args={[undefined, undefined, ROCK_COUNT]}
+				castShadow
+				receiveShadow
+			>
+				<dodecahedronGeometry args={[0.3]} />
+				<meshStandardMaterial color="#9ca3af" flatShading />
+			</instancedMesh>
 		</group>
 	);
 }
