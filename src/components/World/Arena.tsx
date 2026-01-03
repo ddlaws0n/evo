@@ -43,8 +43,8 @@ export function Arena() {
 					args={[ARENA_RADIUS, ARENA_RADIUS, ARENA_HEIGHT, 64]}
 				/>
 				<meshStandardMaterial
-					color="#ffffff"
-					roughness={0.95}
+					color="#d0d0d0"
+					roughness={0.8}
 					metalness={0.02}
 				/>
 			</mesh>
