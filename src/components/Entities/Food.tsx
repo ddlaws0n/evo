@@ -25,9 +25,10 @@ export function Food({ position = [0, 0.5, 0], size = 0.4 }: FoodProps) {
 			<meshStandardMaterial
 				color="#00d9a3"
 				emissive="#00d9a3"
-				emissiveIntensity={0.3}
+				emissiveIntensity={2}
 				roughness={0.4}
 				metalness={0.6}
+				toneMapped={false}
 			/>
 		</mesh>
 	);

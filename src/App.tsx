@@ -1,12 +1,14 @@
 import { Physics } from "@react-three/cannon";
-import { OrbitControls } from "@react-three/drei";
+import { Environment, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useControls } from "leva";
 import { useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Blob } from "./components/Entities/Blob";
 import { Food } from "./components/Entities/Food";
+import { HUD } from "./components/UI/HUD";
 import { Arena } from "./components/World/Arena";
+import { Effects } from "./components/World/Effects";
 
 /**
  * Generate random positions within arena
@@ -54,12 +56,19 @@ function App() {
 	);
 
 	return (
-		<div style={{ width: "100vw", height: "100vh", background: "#f5f5f5" }}>
+		<div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+			{/* HUD Overlay - HTML layer */}
+			<HUD day={1} population={{ live: blobCount, dead: 0 }} />
+
 			<Canvas
 				shadows
 				camera={{ position: [25, 25, 25], fov: 50 }}
 				gl={{ antialias: true }}
+				style={{ background: "#f0f0f0" }}
 			>
+				{/* Environment - Reflections for glassy blobs */}
+				<Environment preset="city" />
+
 				{/* Lighting - Clinical Science Aesthetic */}
 				<ambientLight intensity={0.4} />
 				<directionalLight
@@ -94,6 +103,9 @@ function App() {
 						<Food key={food.id} position={food.position} size={0.4} />
 					))}
 				</Physics>
+
+				{/* Post-processing effects */}
+				<Effects />
 
 				{/* Camera Controls */}
 				<OrbitControls
