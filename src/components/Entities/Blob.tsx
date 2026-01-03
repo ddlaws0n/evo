@@ -167,21 +167,47 @@ export function Blob({
 
 	return (
 		<group ref={ref}>
-			{/* Blob Mesh */}
+			{/* Blob Mesh - Gummy/plastic toy material */}
 			<mesh ref={meshRef} castShadow>
 				<sphereGeometry args={[radius, 32, 32]} />
 				<meshPhysicalMaterial
-					color="#ff3366"
+					color="#f472b6"
 					transparent
-					opacity={0.85}
-					roughness={0.1}
-					metalness={0.1}
-					clearcoat={1.0}
-					clearcoatRoughness={0.1}
-					transmission={0.3}
+					opacity={0.9}
+					roughness={0.25}
+					metalness={0.05}
+					clearcoat={0.5}
+					clearcoatRoughness={0.3}
+					transmission={0.1}
 					thickness={0.5}
 				/>
 			</mesh>
+
+			{/* Left Eye */}
+			<group position={[-0.12, 0.15, 0.4]}>
+				<mesh>
+					<sphereGeometry args={[0.08, 16, 16]} />
+					<meshStandardMaterial color="#ffffff" roughness={0.1} />
+				</mesh>
+				{/* Pupil */}
+				<mesh position={[0, 0, 0.06]}>
+					<sphereGeometry args={[0.035, 12, 12]} />
+					<meshStandardMaterial color="#1f2937" />
+				</mesh>
+			</group>
+
+			{/* Right Eye */}
+			<group position={[0.12, 0.15, 0.4]}>
+				<mesh>
+					<sphereGeometry args={[0.08, 16, 16]} />
+					<meshStandardMaterial color="#ffffff" roughness={0.1} />
+				</mesh>
+				{/* Pupil */}
+				<mesh position={[0, 0, 0.06]}>
+					<sphereGeometry args={[0.035, 12, 12]} />
+					<meshStandardMaterial color="#1f2937" />
+				</mesh>
+			</group>
 
 			{/* Debug Line - Shows target when hunting (imperative updates) */}
 			{debugMode && (
