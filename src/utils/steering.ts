@@ -55,6 +55,7 @@ export function calculateBoundaryForce(blobPos: { x: number; z: number }): {
  * @param senseRadius Detection radius for food
  * @param foods Array of available food entities
  * @param wanderSeed Seed for wander behavior (e.g., elapsed time + position offset)
+ * @param speedMultiplier Genome speed trait (0.5-2.0) to scale forces
  * @returns Steering result with direction, force magnitude, target info
  */
 export function calculateSteeringForce(
@@ -62,6 +63,7 @@ export function calculateSteeringForce(
 	senseRadius: number,
 	foods: FoodEntity[],
 	wanderSeed: number,
+	speedMultiplier: number = 1.0,
 ): {
 	direction: { x: number; z: number };
 	force: number;
@@ -99,7 +101,7 @@ export function calculateSteeringForce(
 	if (steerDirection && targetFoodId) {
 		return {
 			direction: steerDirection,
-			force: HUNT_FORCE,
+			force: HUNT_FORCE * speedMultiplier,
 			targetId: targetFoodId,
 			targetDistance,
 			isHunting: true,
@@ -114,7 +116,7 @@ export function calculateSteeringForce(
 
 	return {
 		direction: wanderDirection,
-		force: WANDER_FORCE,
+		force: WANDER_FORCE * speedMultiplier,
 		targetId: null,
 		targetDistance: Number.POSITIVE_INFINITY,
 		isHunting: false,

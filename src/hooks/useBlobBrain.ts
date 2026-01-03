@@ -46,12 +46,19 @@ export function useBlobBrain() {
 	/**
 	 * Process one frame of brain logic
 	 * Call this inside useFrame with fresh position and store state
+	 *
+	 * @param blobPos Current blob position (x, z)
+	 * @param senseRadius Detection radius for food
+	 * @param foods Array of available food entities
+	 * @param wanderSeed Seed for wander behavior
+	 * @param speedMultiplier Genome speed trait (0.5-2.0) to scale forces
 	 */
 	const tick = (
 		blobPos: { x: number; z: number },
 		senseRadius: number,
 		foods: FoodEntity[],
 		wanderSeed: number,
+		speedMultiplier: number = 1.0,
 	): BrainOutput => {
 		// Calculate distance from arena center
 		const distanceFromCenter = Math.hypot(blobPos.x, blobPos.z);
@@ -72,6 +79,7 @@ export function useBlobBrain() {
 			senseRadius,
 			foods,
 			wanderSeed,
+			speedMultiplier,
 		);
 
 		// ===================
