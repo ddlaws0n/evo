@@ -140,4 +140,30 @@ After Sprint 4, a major refactor separated representation from logic:
 | Implicit state (if/else) | Explicit FSM (WANDERING, HUNTING, RETURNING, EATING) |
 | Math mixed with rendering | Pure functions in `steering.ts` |
 
-This prepares the codebase for Sprint 5: Genetics & Reproduction.
+This prepares the codebase for Sprint 5: Visual Polish & Aesthetic Refinement.
+
+---
+
+## Sprint 5: Visual Polish & Aesthetic Refinement
+
+**Goal:** Elevate visual appeal and create a cohesive "living world" aesthetic.
+
+### Deliverables
+- **Blob enhancement:** Added expressive eyes (left/right pupils) to create personality and life-like appearance
+- **Food redesign:** Replaced utilitarian box with organic apple shape (red sphere + brown stem + green leaf) with gentle bobbing animation
+- **HUD refinement:** Enhanced glassmorphism effect with increased backdrop blur (24px) and inset shadow for stronger liquid glass appearance
+- **Code cleanup:** Standardized formatting across configuration and utility files
+
+### Key Decisions
+- Eyes as separate sphere geometry (two pupils) rather than texture, allowing for dynamic expression in future sprints
+- Food bobbing on visual mesh only (animation), while physics body remains stationary (anchor) - separation of concerns
+- Glassmorphism as core design language for UI (continued from Sprint 2)
+- No functional behavior changes - pure visual enhancements to support immersion
+
+### Visual Characteristics
+- **Blobs:** Gummy toy aesthetic with translucent material + expressive eyes
+- **Food:** Natural, organic appearance with playful animation
+- **HUD:** Liquid glass UI that feels integrated into the 3D world
+
+### Impact
+These changes set the visual foundation for Sprint 6+, where genetic traits will manifest visually (size variation, color mutations, sense radius visualization). The cohesive aesthetic makes the simulation feel like a living ecosystem rather than a physics sandbox.
