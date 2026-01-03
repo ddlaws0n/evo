@@ -1,11 +1,12 @@
 import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
+import { createRandomGenome, type Genome, mutate } from "../utils/genetics";
 
 export interface BlobEntity {
 	id: string;
 	position: [number, number, number];
 	energy: number;
-	senseRadius: number;
+	genome: Genome;
 	foodEaten: number;
 }
 
@@ -28,6 +29,11 @@ interface GameState {
 	updateBlobEnergy: (id: string, amount: number) => void;
 	syncBlobPosition: (id: string, position: [number, number, number]) => void;
 	incrementFoodEaten: (id: string) => void;
+	resetFoodEaten: (id: string) => void;
+	reproduceBlob: (
+		parentId: string,
+		currentPosition: [number, number, number],
+	) => void;
 }
 
 /**
@@ -67,7 +73,7 @@ export const useGameStore = create<GameState>((set) => ({
 			id: uuidv4(),
 			position: generateBlobPosition(15),
 			energy: 100,
-			senseRadius: 8.0, // Increased from 5.0 for better detection
+			genome: createRandomGenome(),
 			foodEaten: 0,
 		}));
 
@@ -107,5 +113,48 @@ export const useGameStore = create<GameState>((set) => ({
 				blob.id === id ? { ...blob, foodEaten: blob.foodEaten + 1 } : blob,
 			),
 		}));
+	},
+
+	resetFoodEaten: (id: string) => {
+		set((state) => ({
+			blobs: state.blobs.map((blob) =>
+				blob.id === id ? { ...blob, foodEaten: 0 } : blob,
+			),
+		}));
+	},
+
+	reproduceBlob: (
+		parentId: string,
+		currentPosition: [number, number, number],
+	) => {
+		set((state) => {
+			const parent = state.blobs.find((b) => b.id === parentId);
+			if (!parent) return state;
+
+			// Create mutated genome for baby
+			const babyGenome = mutate(parent.genome);
+
+			// Calculate spawn offset to avoid physics explosion
+			// Offset = (parent size + baby size) * 1.5 in random direction
+			const offset = (parent.genome.size + babyGenome.size) * 2.5;
+			const angle = Math.random() * Math.PI * 2;
+			const babyPosition: [number, number, number] = [
+				currentPosition[0] + Math.cos(angle) * offset,
+				currentPosition[1],
+				currentPosition[2] + Math.sin(angle) * offset,
+			];
+
+			const baby: BlobEntity = {
+				id: uuidv4(),
+				position: babyPosition,
+				energy: 100,
+				genome: babyGenome,
+				foodEaten: 0,
+			};
+
+			return {
+				blobs: [...state.blobs, baby],
+			};
+		});
 	},
 }));
