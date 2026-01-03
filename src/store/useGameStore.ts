@@ -28,14 +28,28 @@ interface GameState {
 }
 
 /**
- * Generate random position within arena radius
+ * Generate random position for blobs (spawn above ground to fall)
  */
-const generatePosition = (radius: number): [number, number, number] => {
+const generateBlobPosition = (radius: number): [number, number, number] => {
 	const angle = Math.random() * Math.PI * 2;
 	const distance = Math.random() * radius;
 	return [
 		Math.cos(angle) * distance,
-		1, // Spawn above ground
+		1, // Spawn above ground - will fall
+		Math.sin(angle) * distance,
+	];
+};
+
+/**
+ * Generate random position for food (on the ground)
+ * Food is static so it stays where spawned
+ */
+const generateFoodPosition = (radius: number): [number, number, number] => {
+	const angle = Math.random() * Math.PI * 2;
+	const distance = Math.random() * radius;
+	return [
+		Math.cos(angle) * distance,
+		0.4, // On the ground (food size is 0.4, so center at 0.4 sits on Y=0 floor)
 		Math.sin(angle) * distance,
 	];
 };
@@ -48,14 +62,14 @@ export const useGameStore = create<GameState>((set) => ({
 	setupSimulation: (blobCount: number, foodCount: number) => {
 		const blobs: BlobEntity[] = Array.from({ length: blobCount }, () => ({
 			id: uuidv4(),
-			position: generatePosition(15),
+			position: generateBlobPosition(15),
 			energy: 100,
-			senseRadius: 5.0,
+			senseRadius: 8.0, // Increased from 5.0 for better detection
 		}));
 
 		const foods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
 			id: uuidv4(),
-			position: generatePosition(18),
+			position: generateFoodPosition(16), // Reduced from 18 to keep food well inside
 		}));
 
 		set({ blobs, foods });
