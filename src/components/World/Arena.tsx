@@ -1,29 +1,36 @@
-import type { Triplet } from "@react-three/cannon";
-import { useCylinder } from "@react-three/cannon";
+import { usePlane } from "@react-three/cannon";
 import { Grid } from "@react-three/drei";
+import type * as THREE from "three";
+
+// Visual arena radius (the petri dish)
+const ARENA_RADIUS = 20;
+const ARENA_HEIGHT = 0.5;
 
 /**
  * Arena - The physical floor of the simulation
- * A flattened cylinder (radius 20) representing the petri dish
- * with a raised rim to act as a "safe zone" boundary
- * Styled as white ceramic for "microscope" aesthetic
+ * Visual: A flattened cylinder (radius 20) representing the petri dish
+ * Physics: An infinite plane - blobs cannot fall off
  */
 export function Arena() {
-	const ARENA_RADIUS = 20;
-	const ARENA_HEIGHT = 0.5;
-
-	// Main floor - static physics body
-	const [floorRef] = useCylinder<THREE.Mesh>(() => ({
+	// Physics floor - infinite plane at Y=0
+	// This prevents blobs from ever falling off, regardless of position
+	const [physicsFloorRef] = usePlane<THREE.Mesh>(() => ({
 		type: "Static",
-		args: [ARENA_RADIUS, ARENA_RADIUS, ARENA_HEIGHT, 32] as Triplet,
-		position: [0, -ARENA_HEIGHT / 2, 0],
+		rotation: [-Math.PI / 2, 0, 0], // Rotate to be horizontal
+		position: [0, 0, 0],
 	}));
 
 	return (
 		<group>
+			{/* Invisible physics floor (infinite plane) */}
+			<mesh ref={physicsFloorRef}>
+				<planeGeometry args={[1, 1]} />
+				<meshBasicMaterial visible={false} />
+			</mesh>
+
 			{/* Infinite Grid - Lab space illusion below the petri dish */}
 			<Grid
-				position={[0, -ARENA_HEIGHT - 0.01, 0]}
+				position={[0, -0.01, 0]}
 				args={[200, 200]}
 				cellSize={1}
 				cellThickness={0.5}
@@ -37,21 +44,21 @@ export function Arena() {
 				infiniteGrid
 			/>
 
-			{/* Main Arena Floor - White Ceramic */}
-			<mesh ref={floorRef} receiveShadow>
+			{/* Visual Arena Floor - Petri Dish */}
+			<mesh position={[0, 0, 0]} receiveShadow>
 				<cylinderGeometry
 					args={[ARENA_RADIUS, ARENA_RADIUS, ARENA_HEIGHT, 64]}
 				/>
 				<meshStandardMaterial
-					color="#d0d0d0"
+					color="#b0b0b0"
 					roughness={0.8}
 					metalness={0.02}
 				/>
 			</mesh>
 
-			{/* Safe Zone Rim - Rotated flat on the ground */}
+			{/* Safe Zone Rim - Visual boundary indicator */}
 			<mesh
-				position={[0, 0.05, 0]}
+				position={[0, ARENA_HEIGHT / 2 + 0.05, 0]}
 				rotation={[-Math.PI / 2, 0, 0]}
 				receiveShadow
 			>
