@@ -30,7 +30,7 @@ const CHOMP_DURATION = 0.15;
  * - Applying forces from the brain
  */
 export function Blob({
-	id: _id,
+	id,
 	position = [0, 2, 0],
 	radius = 0.5,
 	senseRadius = 10.0,
@@ -72,7 +72,8 @@ export function Blob({
 		if (!ref.current || !meshRef.current) return;
 
 		// Get FRESH store state inside useFrame to avoid stale closures
-		const { foods, removeFood } = useGameStore.getState();
+		const { foods, removeFood, syncBlobPosition, incrementFoodEaten } =
+			useGameStore.getState();
 
 		// Use subscribed physics position (more accurate than mesh position)
 		const blobPos = physicsPosition.current;
@@ -138,6 +139,10 @@ export function Blob({
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
 			removeFood(brainOutput.targetId);
+			incrementFoodEaten(id);
+
+			// Sync position to store (for reproduction spawning)
+			syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
 
 			// Trigger chomp animation
 			isChompingRef.current = true;
