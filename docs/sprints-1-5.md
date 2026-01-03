@@ -167,3 +167,55 @@ This prepares the codebase for Sprint 5: Visual Polish & Aesthetic Refinement.
 
 ### Impact
 These changes set the visual foundation for Sprint 6+, where genetic traits will manifest visually (size variation, color mutations, sense radius visualization). The cohesive aesthetic makes the simulation feel like a living ecosystem rather than a physics sandbox.
+
+---
+
+## Sprint 5.5: Pre-Sprint 6 Preparation
+
+**Goal:** Address critical infrastructure gaps identified in architecture audit before implementing genetics.
+
+### Context
+An architecture audit (`docs/audit.md`) identified a **position sync gap**: the Zustand store only knew blob spawn positions, not current positions. This would break reproduction mechanics (spawning babies where parents are).
+
+### Deliverables
+
+1. **`foodEaten` counter** - Added to `BlobEntity` interface
+   - Tracks how many food items each blob has consumed
+   - Required for Sprint 7's reproduction condition (≥2 food = reproduce)
+   - Initialized to 0 on spawn, incremented on each eat
+
+2. **Position sync infrastructure** - Two new store actions:
+   - `syncBlobPosition(id, position)` - Updates blob's position in store
+   - `incrementFoodEaten(id)` - Increments blob's food counter
+   - Both called from `Blob.tsx` when eating (event-driven, not 60fps)
+
+3. **Camera FOV adjustment** - Reduced from 35° to 28°
+   - Per audit recommendation: cute blob eyes were lost at distance
+   - Tighter FOV creates more intimate, character-focused view
+
+### Technical Implementation
+```typescript
+// useGameStore.ts - New BlobEntity field
+interface BlobEntity {
+  // ...existing fields
+  foodEaten: number;
+}
+
+// useGameStore.ts - New actions
+syncBlobPosition: (id, position) => void;
+incrementFoodEaten: (id) => void;
+
+// Blob.tsx - Called on eat event (not every frame)
+if (brainOutput.state === "EATING" && brainOutput.targetId) {
+  removeFood(brainOutput.targetId);
+  incrementFoodEaten(id);
+  syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+}
+```
+
+### Why Event-Driven Sync?
+The audit recommended "End of Day Snapshot" (Option A). We went further:
+- Sync on eat events (when position matters for reproduction)
+- Avoids Sprint 7 dependency (no day timer needed yet)
+- Zero performance cost (not 60fps, only on discrete events)
+- Store always has "last known position" for baby spawning
