@@ -2,27 +2,13 @@ import { Physics } from "@react-three/cannon";
 import { Environment, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useControls } from "leva";
-import { useMemo } from "react";
-import { v4 as uuidv4 } from "uuid";
+import { useEffect } from "react";
 import { Blob } from "./components/Entities/Blob";
 import { Food } from "./components/Entities/Food";
 import { HUD } from "./components/UI/HUD";
 import { Arena } from "./components/World/Arena";
 import { Effects } from "./components/World/Effects";
-
-/**
- * Generate random positions within arena
- * Pure function - no dependencies on component state
- */
-const generatePosition = (radius: number): [number, number, number] => {
-	const angle = Math.random() * Math.PI * 2;
-	const distance = Math.random() * radius;
-	return [
-		Math.cos(angle) * distance,
-		1, // Spawn above ground
-		Math.sin(angle) * distance,
-	];
-};
+import { useGameStore } from "./store/useGameStore";
 
 /**
  * Main App - The God Mode Simulation
@@ -36,29 +22,18 @@ function App() {
 		foodCount: { value: 10, min: 0, max: 100, step: 1, label: "Food Count" },
 	});
 
-	// Generate stable entity arrays with UUIDs
-	const blobs = useMemo(
-		() =>
-			Array.from({ length: blobCount }, () => ({
-				id: uuidv4(),
-				position: generatePosition(15),
-			})),
-		[blobCount],
-	);
+	// Game state from store
+	const { blobs, foods, day, setupSimulation } = useGameStore();
 
-	const foods = useMemo(
-		() =>
-			Array.from({ length: foodCount }, () => ({
-				id: uuidv4(),
-				position: generatePosition(18),
-			})),
-		[foodCount],
-	);
+	// Initialize simulation when counts change
+	useEffect(() => {
+		setupSimulation(blobCount, foodCount);
+	}, [blobCount, foodCount, setupSimulation]);
 
 	return (
 		<div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 			{/* HUD Overlay - HTML layer */}
-			<HUD day={1} population={{ live: blobCount, dead: 0 }} />
+			<HUD day={day} population={{ live: blobs.length, dead: 0 }} />
 
 			<Canvas
 				shadows
@@ -95,12 +70,18 @@ function App() {
 
 					{/* Blobs - Dynamic entities */}
 					{blobs.map((blob) => (
-						<Blob key={blob.id} position={blob.position} radius={0.5} />
+						<Blob
+							key={blob.id}
+							id={blob.id}
+							position={blob.position}
+							radius={0.5}
+							senseRadius={blob.senseRadius}
+						/>
 					))}
 
 					{/* Food - Static resources */}
 					{foods.map((food) => (
-						<Food key={food.id} position={food.position} size={0.4} />
+						<Food key={food.id} id={food.id} position={food.position} size={0.4} />
 					))}
 				</Physics>
 
