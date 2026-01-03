@@ -17,9 +17,10 @@ import { useGameStore } from "./store/useGameStore";
  */
 function App() {
 	// God Mode Controls
-	const { blobCount, foodCount } = useControls("God Mode", {
+	const { blobCount, foodCount, debugMode } = useControls("God Mode", {
 		blobCount: { value: 5, min: 0, max: 50, step: 1, label: "Blob Count" },
 		foodCount: { value: 10, min: 0, max: 100, step: 1, label: "Food Count" },
+		debugMode: { value: false, label: "Debug Mode" },
 	});
 
 	// Game state from store
@@ -76,6 +77,7 @@ function App() {
 							position={blob.position}
 							radius={0.5}
 							senseRadius={blob.senseRadius}
+							debugMode={debugMode}
 						/>
 					))}
 
