@@ -92,7 +92,7 @@ function App() {
 
 			<Canvas
 				shadows
-				camera={{ position: [30, 30, 30], fov: 35 }}
+				camera={{ position: [30, 30, 30], fov: 28 }}
 				gl={{ antialias: true }}
 			>
 				{/* Gradient Skybox - Floating island aesthetic */}
