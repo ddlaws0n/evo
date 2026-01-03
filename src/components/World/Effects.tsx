@@ -1,23 +1,32 @@
-import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
+import {
+	Bloom,
+	EffectComposer,
+	TiltShift2,
+	Vignette,
+} from "@react-three/postprocessing";
 
 /**
- * Effects - Post-processing stack for "microscope" aesthetic
- * - Bloom: Makes emissive Food glow softly
- * - Vignette: Subtle corner darkening to focus the eye
+ * Effects - Post-processing stack for "Miniature/Toy" aesthetic
+ * - TiltShift2: Blurs top/bottom for macro lens miniature effect
+ * - Bloom: Soft glow for warm lighting
+ * - Vignette: Light corner shading
  */
 export function Effects() {
 	return (
 		<EffectComposer>
-			{/* Bloom - Soft glow on emissive materials (Food) */}
+			{/* TiltShift - Miniature/diorama depth blur */}
+			<TiltShift2 blur={0.05} />
+
+			{/* Bloom - Soft glow on bright areas */}
 			<Bloom
-				luminanceThreshold={1}
+				luminanceThreshold={0.9}
 				luminanceSmoothing={0.9}
-				intensity={1.5}
+				intensity={0.8}
 				mipmapBlur
 			/>
 
-			{/* Vignette - Subtle corner darkening */}
-			<Vignette offset={0.3} darkness={0.4} eskil={false} />
+			{/* Vignette - Light corner shading */}
+			<Vignette offset={0.3} darkness={0.3} eskil={false} />
 		</EffectComposer>
 	);
 }
