@@ -2,13 +2,67 @@ import { Physics } from "@react-three/cannon";
 import { Environment, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useControls } from "leva";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import * as THREE from "three";
 import { Blob } from "./components/Entities/Blob";
 import { Food } from "./components/Entities/Food";
 import { HUD } from "./components/UI/HUD";
 import { Arena } from "./components/World/Arena";
+import { CartoonCloud } from "./components/World/CartoonCloud";
 import { Effects } from "./components/World/Effects";
 import { useGameStore } from "./store/useGameStore";
+
+/**
+ * GradientSkybox - Creates a vertical gradient from zenith to nadir
+ * - Zenith (top): Bright Sky Blue
+ * - Horizon (middle): White Haze
+ * - Nadir (bottom): Deep Void Purple
+ */
+function GradientSkybox() {
+	const shaderMaterial = useMemo(() => {
+		return new THREE.ShaderMaterial({
+			uniforms: {
+				topColor: { value: new THREE.Color("#7dd3fc") }, // Vibrant sky blue (sky-300)
+				middleColor: { value: new THREE.Color("#bae6fd") }, // Deeper sky horizon (sky-200)
+				bottomColor: { value: new THREE.Color("#a5b4fc") }, // Soft indigo (indigo-300)
+			},
+			vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+			fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 middleColor;
+        uniform vec3 bottomColor;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition).y;
+          vec3 color;
+          if (h >= 0.0) {
+            color = mix(middleColor, topColor, h);
+          } else {
+            color = mix(middleColor, bottomColor, -h);
+          }
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+			side: THREE.BackSide,
+			depthWrite: false,
+			depthTest: false,
+		});
+	}, []);
+
+	return (
+		<mesh>
+			<sphereGeometry args={[100, 32, 32]} />
+			<primitive object={shaderMaterial} attach="material" />
+		</mesh>
+	);
+}
 
 /**
  * Main App - The God Mode Simulation
@@ -38,28 +92,56 @@ function App() {
 
 			<Canvas
 				shadows
-				camera={{ position: [25, 25, 25], fov: 50 }}
+				camera={{ position: [30, 30, 30], fov: 35 }}
 				gl={{ antialias: true }}
-				style={{ background: "#f0f0f0" }}
 			>
-				{/* Environment - Reflections for glassy blobs */}
-				<Environment preset="city" />
+				{/* Gradient Skybox - Floating island aesthetic */}
+				<GradientSkybox />
 
-				{/* Lighting - Clinical Science Aesthetic */}
-				<ambientLight intensity={0.4} />
+				{/* Environment - Reflections for gummy blobs */}
+				<Environment preset="forest" />
+
+				{/* Cartoon Clouds - Above the platform */}
+				<CartoonCloud position={[-15, 18, -15]} scale={1.5} speed={0.3} />
+				<CartoonCloud position={[20, 20, 10]} scale={1.2} speed={0.4} />
+				<CartoonCloud position={[0, 22, 25]} scale={1.8} speed={0.25} />
+
+				{/* Cartoon Clouds - At platform level (horizon) */}
+				<CartoonCloud position={[-40, 5, 0]} scale={2} speed={0.2} />
+				<CartoonCloud position={[45, 3, -15]} scale={1.8} speed={0.35} />
+				<CartoonCloud position={[0, 4, -45]} scale={2.2} speed={0.15} />
+
+				{/* Cartoon Clouds - Below the platform (floating island effect) */}
+				<CartoonCloud position={[-25, -10, 20]} scale={1.5} speed={0.4} />
+				<CartoonCloud position={[30, -15, -10]} scale={1.3} speed={0.3} />
+				<CartoonCloud position={[5, -18, 35]} scale={1.8} speed={0.25} />
+				<CartoonCloud position={[-35, -12, -30]} scale={1.4} speed={0.35} />
+
+				{/* Lighting - Hemisphere for ambient sky/ground bounce */}
+				<hemisphereLight args={["#87CEEB", "#2f9e44", 0.6]} />
+
+				{/* Main Sun - Steep angle for dramatic shadows */}
 				<directionalLight
-					position={[10, 20, 10]}
-					intensity={1.2}
+					position={[50, 80, 30]}
+					intensity={1.5}
+					color="#ffeaa7"
 					castShadow
-					shadow-mapSize={[2048, 2048]}
+					shadow-mapSize={[4096, 4096]}
 					shadow-camera-left={-30}
 					shadow-camera-right={30}
 					shadow-camera-top={30}
 					shadow-camera-bottom={-30}
 				/>
 
-				{/* Soft fill light */}
-				<directionalLight position={[-10, 10, -10]} intensity={0.3} />
+				{/* Rim Light - Warm orange backlight for edge highlights */}
+				<spotLight
+					position={[-50, 20, -20]}
+					target-position={[0, 0, 0]}
+					intensity={2.0}
+					color="#fbbf24"
+					angle={Math.PI / 4}
+					penumbra={0.5}
+				/>
 
 				{/* Physics World */}
 				<Physics
@@ -95,12 +177,14 @@ function App() {
 				{/* Post-processing effects */}
 				<Effects />
 
-				{/* Camera Controls */}
+				{/* Camera Controls - Fake isometric with locked angle */}
 				<OrbitControls
 					enableDamping
 					dampingFactor={0.05}
 					minDistance={10}
 					maxDistance={60}
+					minPolarAngle={Math.PI / 6}
+					maxPolarAngle={Math.PI / 3}
 				/>
 			</Canvas>
 		</div>
