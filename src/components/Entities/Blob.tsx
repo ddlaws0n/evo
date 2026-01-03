@@ -15,9 +15,14 @@ interface BlobProps {
 	debugMode?: boolean;
 }
 
-// Chomp animation settings
+// Animation settings
 const CHOMP_SCALE = 1.3;
 const CHOMP_DURATION = 0.15;
+const BIRTH_DURATION = 0.4;
+const BIRTH_OVERSHOOT = 1.15; // Pop effect overshoot
+
+// Original blob radius the eye positions were designed for
+const BASE_RADIUS = 0.5;
 
 /**
  * Blob - The main agent entity
@@ -35,7 +40,8 @@ export function Blob({
 	genome,
 	debugMode = false,
 }: BlobProps) {
-	const meshRef = useRef<THREE.Mesh>(null);
+	// Visual group ref (for scaling body + eyes together during animations)
+	const visualGroupRef = useRef<THREE.Group>(null);
 
 	// Derive visual properties from genome
 	const blobColor = useMemo(
@@ -45,6 +51,10 @@ export function Blob({
 
 	// Track actual physics position via subscription
 	const physicsPosition = useRef<THREE.Vector3>(new THREE.Vector3(...position));
+
+	// Birth animation state
+	const birthTimeRef = useRef<number>(0);
+	const isBornRef = useRef<boolean>(false);
 
 	// Chomp animation state (using refs for 60fps updates)
 	const chompTimeRef = useRef<number>(0);
@@ -74,7 +84,7 @@ export function Blob({
 	const brain = useBlobBrain();
 
 	useFrame((state, delta) => {
-		if (!ref.current || !meshRef.current) return;
+		if (!ref.current || !visualGroupRef.current) return;
 
 		// Get FRESH store state inside useFrame to avoid stale closures
 		const {
@@ -91,6 +101,34 @@ export function Blob({
 		const blobPos = physicsPosition.current;
 
 		// ===================
+		// BIRTH ANIMATION (runs first, before other animations)
+		// ===================
+		if (!isBornRef.current) {
+			birthTimeRef.current += delta;
+			const t = Math.min(birthTimeRef.current / BIRTH_DURATION, 1);
+
+			// Ease-out with overshoot: starts at 0, overshoots to 1.15, settles to 1
+			let birthScale: number;
+			if (t < 0.7) {
+				// Ease-out to overshoot
+				const easeT = t / 0.7;
+				birthScale = BIRTH_OVERSHOOT * (1 - (1 - easeT) ** 3);
+			} else {
+				// Settle from overshoot to 1
+				const settleT = (t - 0.7) / 0.3;
+				birthScale = BIRTH_OVERSHOOT - (BIRTH_OVERSHOOT - 1) * settleT;
+			}
+
+			visualGroupRef.current.scale.setScalar(birthScale);
+
+			if (t >= 1) {
+				isBornRef.current = true;
+				visualGroupRef.current.scale.setScalar(1);
+			}
+			return; // Don't process other logic until born
+		}
+
+		// ===================
 		// CHOMP ANIMATION
 		// ===================
 		if (isChompingRef.current) {
@@ -98,12 +136,12 @@ export function Blob({
 			const t = chompTimeRef.current / CHOMP_DURATION;
 
 			if (t >= 1) {
-				meshRef.current.scale.setScalar(1);
+				visualGroupRef.current.scale.setScalar(1);
 				isChompingRef.current = false;
 				chompTimeRef.current = 0;
 			} else {
 				const scale = 1 + (CHOMP_SCALE - 1) * Math.sin(t * Math.PI);
-				meshRef.current.scale.setScalar(scale);
+				visualGroupRef.current.scale.setScalar(scale);
 			}
 		}
 
@@ -202,51 +240,55 @@ export function Blob({
 		}
 	});
 
-	// Scale factor for eyes (relative to blob size)
-	const eyeScale = genome.size;
+	// Scale factor for eyes - positions were designed for BASE_RADIUS (0.5)
+	// So we scale relative to that baseline to maintain proportions
+	const eyeScale = genome.size / BASE_RADIUS;
 
 	return (
 		<group ref={ref}>
-			{/* Blob Mesh - Gummy/plastic toy material */}
-			<mesh ref={meshRef} castShadow>
-				<sphereGeometry args={[genome.size, 32, 32]} />
-				<meshPhysicalMaterial
-					color={blobColor}
-					transparent
-					opacity={0.9}
-					roughness={0.25}
-					metalness={0.05}
-					clearcoat={0.5}
-					clearcoatRoughness={0.3}
-					transmission={0.1}
-					thickness={0.5}
-				/>
-			</mesh>
+			{/* Visual Group - Contains body + eyes, scaled together for animations */}
+			<group ref={visualGroupRef}>
+				{/* Blob Mesh - Gummy/plastic toy material */}
+				<mesh castShadow>
+					<sphereGeometry args={[genome.size, 32, 32]} />
+					<meshPhysicalMaterial
+						color={blobColor}
+						transparent
+						opacity={0.9}
+						roughness={0.25}
+						metalness={0.05}
+						clearcoat={0.5}
+						clearcoatRoughness={0.3}
+						transmission={0.1}
+						thickness={0.5}
+					/>
+				</mesh>
 
-			{/* Left Eye - Position scaled by genome.size */}
-			<group position={[-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
-				<mesh>
-					<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
-					<meshStandardMaterial color="#ffffff" roughness={0.1} />
-				</mesh>
-				{/* Pupil */}
-				<mesh position={[0, 0, 0.06 * eyeScale]}>
-					<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
-					<meshStandardMaterial color="#1f2937" />
-				</mesh>
-			</group>
+				{/* Left Eye - Position scaled relative to BASE_RADIUS */}
+				<group position={[-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
+					<mesh>
+						<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
+						<meshStandardMaterial color="#ffffff" roughness={0.1} />
+					</mesh>
+					{/* Pupil */}
+					<mesh position={[0, 0, 0.06 * eyeScale]}>
+						<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
+						<meshStandardMaterial color="#1f2937" />
+					</mesh>
+				</group>
 
-			{/* Right Eye - Position scaled by genome.size */}
-			<group position={[0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
-				<mesh>
-					<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
-					<meshStandardMaterial color="#ffffff" roughness={0.1} />
-				</mesh>
-				{/* Pupil */}
-				<mesh position={[0, 0, 0.06 * eyeScale]}>
-					<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
-					<meshStandardMaterial color="#1f2937" />
-				</mesh>
+				{/* Right Eye - Position scaled relative to BASE_RADIUS */}
+				<group position={[0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
+					<mesh>
+						<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
+						<meshStandardMaterial color="#ffffff" roughness={0.1} />
+					</mesh>
+					{/* Pupil */}
+					<mesh position={[0, 0, 0.06 * eyeScale]}>
+						<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
+						<meshStandardMaterial color="#1f2937" />
+					</mesh>
+				</group>
 			</group>
 
 			{/* Debug Line - Shows target when hunting (imperative updates) */}
