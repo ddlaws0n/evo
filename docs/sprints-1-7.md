@@ -1,4 +1,4 @@
-# Sprint History (1-6)
+# Sprint History (1-7)
 
 Historical record of completed development sprints.
 
@@ -303,3 +303,136 @@ reproduceBlob: (parentId, currentPosition) => {
 ### Impact
 
 Blobs now have individuality. You can visually identify fast blobs (cyan) vs sensory blobs (magenta), large vs small. When a cyan blob reproduces, its baby is also cyan (with slight variation). This creates the foundation for natural selection in Sprint 7, where traits will affect survival.
+
+---
+
+## Sprint 7: The Cycle (Energy & Time)
+
+**Goal:** Introduce "Selective Pressure." Blobs must efficiently manage energy and beat the clock to survive.
+
+### Deliverables
+
+1. **Day/Night Cycle** (`src/hooks/useSimulationTimer.ts`)
+   - 30-second days with ref-based countdown (not React state)
+   - Phase transitions: DAY → NIGHT → JUDGMENT → DAY
+   - Timer displayed in HUD
+
+2. **Energy System** (`src/components/Entities/Blob.tsx`)
+   - Formula: `Cost = C_MOVE × (Size³ × Speed²) + C_SENSE × Sense`
+   - Energy tracked via `useRef` (not state) for performance
+   - Death triggers when energy ≤ 0
+   - Energy gain: +40 from food, +50×prey.size from predation
+
+3. **Predation/Cannibalism** (`src/hooks/useBlobBrain.ts`)
+   - Blobs can eat other blobs if ≥20% larger (`size > target.size × 1.2`)
+   - Brain detects prey within sense radius
+   - Predator gains `foodEaten++` (counts toward reproduction)
+
+4. **Fleeing Behavior** (`src/hooks/useBlobBrain.ts`)
+   - New FSM state: `FLEEING`
+   - Triggers when larger blob (>1.2× size) detected in sense radius
+   - Flee direction: away from threat
+   - Highest priority state (survival instinct)
+
+5. **RETURNING State Enhancement**
+   - Triggers at 90% timer elapsed (3s remaining)
+   - Direction: toward arena edge (not center)
+   - Blobs head "home" before day ends
+
+6. **End of Day Judgment** (`src/store/useGameStore.ts`)
+   - `foodEaten < 1` → Death
+   - `foodEaten = 1` → Survive (teleport to edge, reset energy)
+   - `foodEaten >= 2` → Reproduce (survive + spawn mutated baby)
+
+7. **Absorption Animation** (`src/components/Entities/Blob.tsx`)
+   - When eaten: prey shrinks to 0 over 0.3s
+   - Prey lerps toward predator position
+   - Clean visual feedback for predation
+
+8. **Night Overlay** (`src/components/UI/NightOverlay.tsx`)
+   - Fades to 85% opacity slate-900 during NIGHT/JUDGMENT
+   - 1.5s ease-in-out transition
+   - Creates dramatic day/night visual
+
+### Energy Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| C_MOVE | 0.05 | Movement cost coefficient (size³ × speed²) |
+| C_SENSE | 0.003 | Sense cost coefficient |
+| FLEE_FORCE | 5.0 | Fleeing force (faster than hunt) |
+| RETURN_FORCE | 4.0 | Return to edge force |
+| SPAWN_RADIUS | 16.5 | Edge spawn ring |
+| PREDATION_SIZE_RATIO | 1.2 | Must be 20% larger to eat |
+
+### FSM State Priority (Highest to Lowest)
+
+1. **FLEEING** - Threat detected, run away
+2. **EATING** - At food or prey
+3. **RETURNING** - Timer at 90%, head to edge
+4. **HUNTING** - Food or prey in range
+5. **WANDERING** - Default behavior
+
+### Day/Night Flow
+
+```
+Timer: 30s → 3s → 0s
+         |      |     |
+         |      |     v
+         |      |   startNight()
+         |      |   NightOverlay fades in (1.5s)
+         |      |     |
+         |      v     v (after 2s)
+         |   RETURNING   runJudgment()
+         |   (to edge)   - Remove blobs with 0 food
+         v               - Reproduce blobs with 2+ food
+      Normal             - Teleport survivors to edge
+      hunting            - Spawn new food in center
+                         - Increment day counter
+                           |
+                           v
+                       NightOverlay fades out
+                       New day begins
+```
+
+### Critical Pattern: Ref-Based Energy
+
+```typescript
+// WRONG - State updates at 60fps kills performance
+const [energy, setEnergy] = useState(100);
+useFrame((_, delta) => {
+  setEnergy(e => e - cost * delta); // 60 re-renders/second!
+});
+
+// CORRECT - Ref tracks energy, only sync on events
+const energyRef = useRef(100);
+useFrame((_, delta) => {
+  energyRef.current -= cost * delta; // No re-renders
+  if (energyRef.current <= 0) {
+    removeBlob(id); // Sync only on death
+  }
+});
+```
+
+### Files Changed
+
+| File | Changes |
+|------|---------|
+| `src/utils/steering.ts` | Added C_MOVE, C_SENSE, FLEE_FORCE, RETURN_FORCE, SPAWN_RADIUS, PREDATION_SIZE_RATIO |
+| `src/store/useGameStore.ts` | Added phase, timeRemaining, dayDuration, deadThisDay, beingEatenBy/Position; new actions (setTimeRemaining, startNight, startDay, runJudgment, removeBlob, markBlobAsEaten) |
+| `src/hooks/useSimulationTimer.ts` | **NEW** - Day/night timer hook |
+| `src/hooks/useBlobBrain.ts` | Added FLEEING state, predation detection, threat detection, RETURNING at 90% timer, targetType field |
+| `src/components/Entities/Blob.tsx` | Energy decay (ref-based), absorption animation, predation handling |
+| `src/components/UI/NightOverlay.tsx` | **NEW** - Night phase overlay |
+| `src/components/UI/HUD.tsx` | Added timer display |
+| `src/App.tsx` | SimulationController component, NightOverlay integration |
+
+### Impact
+
+The simulation now has **selective pressure**. Traits matter:
+- **Big + Fast** blobs burn energy quickly, must eat often or die
+- **Small** blobs are prey but cheaper to run
+- **High Sense** blobs find food faster but cost more energy
+- **Fleeing** gives small blobs a survival strategy
+
+Natural selection will now favor efficient trait combinations. Over generations, the population should evolve toward sustainable energy budgets.

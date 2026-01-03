@@ -6,7 +6,8 @@ import * as THREE from "three";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
 import { useGameStore } from "../../store/useGameStore";
 import { type Genome, getBlobColor } from "../../utils/genetics";
-import { ARENA_RADIUS } from "../../utils/steering";
+import { logAsync } from "../../utils/logger";
+import { ARENA_RADIUS, C_MOVE, C_SENSE } from "../../utils/steering";
 
 interface BlobProps {
 	id: string;
@@ -20,6 +21,11 @@ const CHOMP_SCALE = 1.3;
 const CHOMP_DURATION = 0.15;
 const BIRTH_DURATION = 0.4;
 const BIRTH_OVERSHOOT = 1.15; // Pop effect overshoot
+const ABSORPTION_DURATION = 0.3; // Sprint 7: prey absorption animation
+
+// Energy settings
+const ENERGY_FOOD_GAIN = 40; // Energy gained from eating food
+const ENERGY_PREY_MULTIPLIER = 50; // Energy gained = prey.size * this multiplier
 
 // Original blob radius the eye positions were designed for
 const BASE_RADIUS = 0.5;
@@ -60,6 +66,14 @@ export function Blob({
 	const chompTimeRef = useRef<number>(0);
 	const isChompingRef = useRef<boolean>(false);
 
+	// Sprint 7: Energy tracking (ref-based for performance)
+	const energyRef = useRef<number>(100);
+
+	// Sprint 7: Absorption animation (when being eaten)
+	const isBeingEatenRef = useRef<boolean>(false);
+	const absorptionTargetRef = useRef<THREE.Vector3 | null>(null);
+	const absorptionTimeRef = useRef<number>(0);
+
 	// Debug line geometry (imperative updates, no re-renders)
 	const lineGeoRef = useRef<THREE.BufferGeometry>(null);
 
@@ -90,15 +104,58 @@ export function Blob({
 		const {
 			foods,
 			blobs,
+			phase,
+			timeRemaining,
 			removeFood,
+			removeBlob,
 			syncBlobPosition,
 			incrementFoodEaten,
-			resetFoodEaten,
-			reproduceBlob,
+			markBlobAsEaten,
 		} = useGameStore.getState();
 
 		// Use subscribed physics position (more accurate than mesh position)
 		const blobPos = physicsPosition.current;
+
+		// ===================
+		// ABSORPTION ANIMATION (being eaten by predator)
+		// ===================
+		// Check if we've been marked as being eaten
+		const selfBlob = blobs.find((b) => b.id === id);
+		if (selfBlob?.beingEatenBy && !isBeingEatenRef.current) {
+			isBeingEatenRef.current = true;
+			absorptionTargetRef.current = selfBlob.beingEatenPosition
+				? new THREE.Vector3(...selfBlob.beingEatenPosition)
+				: null;
+			absorptionTimeRef.current = 0;
+		}
+
+		if (isBeingEatenRef.current) {
+			absorptionTimeRef.current += delta;
+			const t = absorptionTimeRef.current / ABSORPTION_DURATION;
+
+			if (t >= 1) {
+				// Remove blob after animation completes
+				logAsync(`🍽️ Blob absorbed | ID: ${id.slice(0, 8)}`);
+				removeBlob(id);
+				return;
+			}
+
+			// Scale down and move toward predator
+			const scale = Math.max(0, 1 - t);
+			visualGroupRef.current.scale.setScalar(scale);
+
+			// Lerp position toward predator
+			if (absorptionTargetRef.current) {
+				const target = absorptionTargetRef.current;
+				api.position.set(
+					blobPos.x + (target.x - blobPos.x) * t * 0.5,
+					blobPos.y,
+					blobPos.z + (target.z - blobPos.z) * t * 0.5,
+				);
+			}
+
+			return; // Skip other logic while being absorbed
+		}
 
 		// ===================
 		// BIRTH ANIMATION (runs first, before other animations)
@@ -126,6 +183,22 @@ export function Blob({
 				visualGroupRef.current.scale.setScalar(1);
 			}
 			return; // Don't process other logic until born
+		}
+
+		// ===================
+		// ENERGY DECAY (Sprint 7)
+		// ===================
+		// Only decay energy during DAY phase
+		if (phase === "DAY") {
+			const { size, speed, sense } = genome;
+			// Formula: Cost = C_MOVE * (size^3 * speed^2) + C_SENSE * sense
+			// Multiply by 60 to normalize for 60fps (delta is ~0.016 at 60fps)
+			const energyCost =
+				(C_MOVE * size ** 3 * speed ** 2 + C_SENSE * sense) * delta * 60;
+			energyRef.current -= energyCost;
+
+			// Clamp energy to 0 minimum (death happens at judgment, not here)
+			energyRef.current = Math.max(0, energyRef.current);
 		}
 
 		// ===================
@@ -173,13 +246,23 @@ export function Blob({
 			{ x: blobPos.x, z: blobPos.z },
 			genome.sense,
 			foods,
+			blobs,
+			id,
+			genome.size,
 			wanderSeed,
-			genome.speed, // Speed multiplier for forces
+			genome.speed,
+			timeRemaining,
 		);
 
 		// ===================
 		// APPLY FORCES
 		// ===================
+		// EXHAUSTION PENALTY: Sluggish movement if starving
+		if (energyRef.current <= 0) {
+			brainOutput.totalForce.x *= 0.2;
+			brainOutput.totalForce.z *= 0.2;
+		}
+
 		api.applyForce(
 			[brainOutput.totalForce.x, 0, brainOutput.totalForce.z],
 			[0, 0, 0],
@@ -189,51 +272,65 @@ export function Blob({
 		// EATING LOGIC
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
-			removeFood(brainOutput.targetId);
+			if (brainOutput.targetType === "food") {
+				// Eating food
+				removeFood(brainOutput.targetId);
 
-			// Get current food count BEFORE incrementing
-			const currentBlob = blobs.find((b) => b.id === id);
-			const currentFoodEaten = currentBlob?.foodEaten ?? 0;
+				// Gain energy from food
+				energyRef.current = Math.min(100, energyRef.current + ENERGY_FOOD_GAIN);
 
-			incrementFoodEaten(id);
+				// Increment food counter (reproduction happens at end of day)
+				incrementFoodEaten(id);
 
-			// Sync position to store
-			syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+				// Sync position to store
+				syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
 
-			// ===================
-			// REPRODUCTION CHECK
-			// ===================
-			// If this eat brings us to 2+ food, reproduce
-			if (currentFoodEaten + 1 >= 2) {
-				const currentPos: [number, number, number] = [
-					blobPos.x,
-					blobPos.y,
-					blobPos.z,
-				];
-				reproduceBlob(id, currentPos);
-				resetFoodEaten(id);
+				// Trigger chomp animation
+				isChompingRef.current = true;
+				chompTimeRef.current = 0;
+			} else if (brainOutput.targetType === "blob") {
+				// Eating another blob (predation)
+				const prey = blobs.find((b) => b.id === brainOutput.targetId);
+				if (prey && !prey.beingEatenBy) {
+					// Mark prey as being eaten (triggers absorption animation on prey)
+					markBlobAsEaten(prey.id, id, [blobPos.x, blobPos.y, blobPos.z]);
+
+					// Gain energy from prey (proportional to prey size)
+					const preyEnergy = prey.genome.size * ENERGY_PREY_MULTIPLIER;
+					energyRef.current = Math.min(100, energyRef.current + preyEnergy);
+
+					// Increment food counter (reproduction happens at end of day)
+					incrementFoodEaten(id);
+
+					// Sync position
+					syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+
+					// Trigger chomp animation
+					isChompingRef.current = true;
+					chompTimeRef.current = 0;
+				}
 			}
-
-			// Trigger chomp animation
-			isChompingRef.current = true;
-			chompTimeRef.current = 0;
 		}
 
 		// ===================
 		// DEBUG VISUALIZATION (Imperative Update)
 		// ===================
 		if (debugMode && brainOutput.state === "HUNTING" && brainOutput.targetId) {
-			// Find the target food and update line geometry directly
-			const targetFood = foods.find((f) => f.id === brainOutput.targetId);
-			if (targetFood && lineGeoRef.current) {
-				// Update line positions directly without re-rendering component
+			// Find the target (food or blob) and update line geometry directly
+			let targetPos: [number, number, number] | null = null;
+
+			if (brainOutput.targetType === "food") {
+				const targetFood = foods.find((f) => f.id === brainOutput.targetId);
+				if (targetFood) targetPos = targetFood.position;
+			} else if (brainOutput.targetType === "blob") {
+				const targetBlob = blobs.find((b) => b.id === brainOutput.targetId);
+				if (targetBlob) targetPos = targetBlob.position;
+			}
+
+			if (targetPos && lineGeoRef.current) {
 				const points = [
 					new THREE.Vector3(blobPos.x, blobPos.y, blobPos.z),
-					new THREE.Vector3(
-						targetFood.position[0],
-						targetFood.position[1],
-						targetFood.position[2],
-					),
+					new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]),
 				];
 				lineGeoRef.current.setFromPoints(points);
 			}

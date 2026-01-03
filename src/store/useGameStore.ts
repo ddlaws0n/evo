@@ -1,6 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import { createRandomGenome, type Genome, mutate } from "../utils/genetics";
+import { logAsync } from "../utils/logger";
+import { SPAWN_RADIUS } from "../utils/steering";
+
+export type SimulationPhase = "DAY" | "SUNSET" | "NIGHT";
 
 export interface BlobEntity {
 	id: string;
@@ -8,6 +12,9 @@ export interface BlobEntity {
 	energy: number;
 	genome: Genome;
 	foodEaten: number;
+	// Sprint 7: Predation state
+	beingEatenBy: string | null;
+	beingEatenPosition: [number, number, number] | null;
 }
 
 export interface FoodEntity {
@@ -22,6 +29,10 @@ interface GameState {
 
 	// Simulation state
 	day: number;
+	phase: SimulationPhase;
+	timeRemaining: number;
+	dayDuration: number;
+	deadThisDay: number;
 
 	// Actions
 	setupSimulation: (blobCount: number, foodCount: number) => void;
@@ -34,24 +45,36 @@ interface GameState {
 		parentId: string,
 		currentPosition: [number, number, number],
 	) => void;
+	// Sprint 7: Timer and phase actions
+	setTimeRemaining: (time: number) => void;
+	startSunset: () => void;
+	startNight: () => void;
+	startDay: () => void;
+	runJudgment: (foodCount: number) => void;
+	// Sprint 7: Death and predation
+	removeBlob: (id: string) => void;
+	markBlobAsEaten: (
+		preyId: string,
+		predatorId: string,
+		predatorPosition: [number, number, number],
+	) => void;
 }
 
 /**
- * Generate random position for blobs (spawn above ground to fall)
+ * Generate random position for blobs at arena edge (spawn ring)
  */
-const generateBlobPosition = (radius: number): [number, number, number] => {
+const generateEdgePosition = (): [number, number, number] => {
 	const angle = Math.random() * Math.PI * 2;
-	const distance = Math.random() * radius;
 	return [
-		Math.cos(angle) * distance,
+		Math.cos(angle) * SPAWN_RADIUS,
 		1, // Spawn above ground - will fall
-		Math.sin(angle) * distance,
+		Math.sin(angle) * SPAWN_RADIUS,
 	];
 };
 
 /**
  * Generate random position for food (on the ground)
- * Food is static so it stays where spawned
+ * Food spawns in center area during day reset
  */
 const generateFoodPosition = (radius: number): [number, number, number] => {
 	const angle = Math.random() * Math.PI * 2;
@@ -67,22 +90,35 @@ export const useGameStore = create<GameState>((set) => ({
 	blobs: [],
 	foods: [],
 	day: 1,
+	phase: "DAY",
+	timeRemaining: 30,
+	dayDuration: 30,
+	deadThisDay: 0,
 
 	setupSimulation: (blobCount: number, foodCount: number) => {
 		const blobs: BlobEntity[] = Array.from({ length: blobCount }, () => ({
 			id: uuidv4(),
-			position: generateBlobPosition(15),
+			position: generateEdgePosition(), // Start at edge
 			energy: 100,
 			genome: createRandomGenome(),
 			foodEaten: 0,
+			beingEatenBy: null,
+			beingEatenPosition: null,
 		}));
 
 		const foods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
 			id: uuidv4(),
-			position: generateFoodPosition(16), // Reduced from 18 to keep food well inside
+			position: generateFoodPosition(12), // Center area
 		}));
 
-		set({ blobs, foods });
+		set({
+			blobs,
+			foods,
+			day: 1,
+			phase: "DAY",
+			timeRemaining: 30,
+			deadThisDay: 0,
+		});
 	},
 
 	removeFood: (id: string) => {
@@ -150,11 +186,138 @@ export const useGameStore = create<GameState>((set) => ({
 				energy: 100,
 				genome: babyGenome,
 				foodEaten: 0,
+				beingEatenBy: null,
+				beingEatenPosition: null,
 			};
 
 			return {
 				blobs: [...state.blobs, baby],
 			};
 		});
+	},
+
+	// ===================
+	// SPRINT 7: Timer & Phase Actions
+	// ===================
+
+	setTimeRemaining: (time: number) => {
+		set({ timeRemaining: time });
+	},
+
+	startSunset: () => {
+		logAsync("🌅 SUNSET | Blobs returning home...");
+		set({ phase: "SUNSET" });
+	},
+
+	startNight: () => {
+		logAsync("🌙 NIGHT | Running judgment...");
+		set({ phase: "NIGHT" });
+	},
+
+	startDay: () => {
+		set((state) => {
+			logAsync(`☀️ DAY ${state.day} START | Population: ${state.blobs.length}`);
+			return { phase: "DAY", timeRemaining: 30, deadThisDay: 0 };
+		});
+	},
+
+	runJudgment: (foodCount: number) => {
+		set((state) => {
+			const survivors: BlobEntity[] = [];
+			const babies: BlobEntity[] = [];
+
+			for (const blob of state.blobs) {
+				// Skip blobs being eaten (they'll be removed by predation)
+				if (blob.beingEatenBy) continue;
+
+				if (blob.foodEaten < 1) {
+					// DEATH: Didn't eat anything (just skip, don't add to survivors)
+				} else if (blob.foodEaten >= 2) {
+					// REPRODUCE: Ate 2+ food
+					survivors.push({
+						...blob,
+						foodEaten: 0,
+						energy: 100,
+						position: generateEdgePosition(),
+						beingEatenBy: null,
+						beingEatenPosition: null,
+					});
+
+					// Create baby with mutated genome
+					const babyGenome = mutate(blob.genome);
+					babies.push({
+						id: uuidv4(),
+						position: generateEdgePosition(),
+						energy: 100,
+						genome: babyGenome,
+						foodEaten: 0,
+						beingEatenBy: null,
+						beingEatenPosition: null,
+					});
+				} else {
+					// SURVIVE: Ate exactly 1 food
+					survivors.push({
+						...blob,
+						foodEaten: 0,
+						energy: 100,
+						position: generateEdgePosition(),
+						beingEatenBy: null,
+						beingEatenPosition: null,
+					});
+				}
+			}
+
+			// Generate new food batch in center
+			const newFoods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
+				id: uuidv4(),
+				position: generateFoodPosition(12),
+			}));
+
+			// Log judgment results
+			logAsync(
+				`📊 JUDGMENT | Survivors: ${survivors.length} | ` +
+					`Died: ${state.blobs.length - survivors.length - babies.length} | ` +
+					`Reproduced: ${babies.length}`,
+			);
+
+			return {
+				blobs: [...survivors, ...babies],
+				foods: newFoods,
+				day: state.day + 1,
+				phase: "DAY" as SimulationPhase,
+				timeRemaining: 30,
+				deadThisDay: 0,
+			};
+		});
+	},
+
+	// ===================
+	// SPRINT 7: Death & Predation
+	// ===================
+
+	removeBlob: (id: string) => {
+		logAsync(`💀 Blob removed | ID: ${id.slice(0, 8)}`);
+		set((state) => ({
+			blobs: state.blobs.filter((blob) => blob.id !== id),
+			deadThisDay: state.deadThisDay + 1,
+		}));
+	},
+
+	markBlobAsEaten: (
+		preyId: string,
+		predatorId: string,
+		predatorPosition: [number, number, number],
+	) => {
+		set((state) => ({
+			blobs: state.blobs.map((blob) =>
+				blob.id === preyId
+					? {
+							...blob,
+							beingEatenBy: predatorId,
+							beingEatenPosition: predatorPosition,
+						}
+					: blob,
+			),
+		}));
 	},
 }));

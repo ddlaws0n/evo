@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 interface HUDProps {
 	day?: number;
+	timeRemaining?: number;
 	population?: { live: number; dead: number };
 }
 
@@ -10,13 +11,26 @@ interface HUDProps {
  * Displays simulation metrics with Apple-inspired glassmorphism
  * Pure HTML overlay (not Canvas-rendered)
  */
-export function HUD({ day = 1, population = { live: 5, dead: 0 } }: HUDProps) {
+export function HUD({
+	day = 1,
+	timeRemaining = 30,
+	population = { live: 5, dead: 0 },
+}: HUDProps) {
+	// Format time as seconds with one decimal
+	const timeDisplay = Math.max(0, timeRemaining).toFixed(1);
+
 	return (
 		<div style={styles.container}>
 			{/* Top Left - Day Counter */}
 			<div style={{ ...styles.panel, ...styles.topLeft }}>
 				<span style={styles.label}>Day</span>
 				<span style={styles.value}>{day}</span>
+			</div>
+
+			{/* Top Center - Timer */}
+			<div style={{ ...styles.panel, ...styles.topCenter }}>
+				<span style={styles.label}>Time</span>
+				<span style={styles.timerValue}>{timeDisplay}s</span>
 			</div>
 
 			{/* Top Right - Population Metrics */}
@@ -61,9 +75,21 @@ const styles: Record<string, CSSProperties> = {
 		top: "20px",
 		left: "20px",
 	},
+	topCenter: {
+		top: "20px",
+		left: "50%",
+		transform: "translateX(-50%)",
+	},
 	topRight: {
 		top: "20px",
 		right: "20px",
+	},
+	timerValue: {
+		fontFamily: "'Courier New', Courier, monospace",
+		fontSize: "28px",
+		fontWeight: 700,
+		color: "rgba(0, 0, 0, 0.85)",
+		lineHeight: 1,
 	},
 	label: {
 		fontFamily: "system-ui, -apple-system, sans-serif",

@@ -8,6 +8,18 @@ export const WANDER_FORCE = 0.8;
 export const SOFT_RETURN_FORCE = 3.0;
 export const EAT_DISTANCE = 1.5;
 
+// Sprint 7: Energy system constants
+export const C_MOVE = 0.05; // Movement energy coefficient (size^3 * speed^2)
+export const C_SENSE = 0.003; // Sense energy coefficient
+
+// Sprint 7: Force constants
+export const FLEE_FORCE = 5.0; // Fleeing force (faster than hunt for survival)
+export const RETURN_FORCE = 4.0; // Return to edge force
+
+// Sprint 7: Spawn constants
+export const SPAWN_RADIUS = 16.5; // Edge spawn ring (between soft and hard boundary)
+export const PREDATION_SIZE_RATIO = 1.2; // Must be 20% larger to eat another blob
+
 /**
  * Calculate 2D distance on the XZ plane (ignores Y axis)
  */

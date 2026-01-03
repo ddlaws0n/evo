@@ -7,9 +7,11 @@ import * as THREE from "three";
 import { Blob } from "./components/Entities/Blob";
 import { Food } from "./components/Entities/Food";
 import { HUD } from "./components/UI/HUD";
+import { NightOverlay } from "./components/UI/NightOverlay";
 import { Arena } from "./components/World/Arena";
 import { CartoonCloud } from "./components/World/CartoonCloud";
 import { Effects } from "./components/World/Effects";
+import { useSimulationTimer } from "./hooks/useSimulationTimer";
 import { useGameStore } from "./store/useGameStore";
 
 /**
@@ -65,6 +67,15 @@ function GradientSkybox() {
 }
 
 /**
+ * SimulationController - Invisible component that runs the day/night timer
+ * Lives inside Physics world to access useFrame
+ */
+function SimulationController({ foodCount }: { foodCount: number }) {
+	useSimulationTimer(foodCount);
+	return null;
+}
+
+/**
  * Main App - The God Mode Simulation
  * User controls entity counts via Leva
  * Physics runs with realistic gravity
@@ -78,7 +89,15 @@ function App() {
 	});
 
 	// Game state from store
-	const { blobs, foods, day, setupSimulation } = useGameStore();
+	const {
+		blobs,
+		foods,
+		day,
+		phase,
+		timeRemaining,
+		deadThisDay,
+		setupSimulation,
+	} = useGameStore();
 
 	// Initialize simulation when counts change
 	useEffect(() => {
@@ -87,8 +106,15 @@ function App() {
 
 	return (
 		<div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+			{/* Night Overlay - Fades in during night phase */}
+			<NightOverlay phase={phase} />
+
 			{/* HUD Overlay - HTML layer */}
-			<HUD day={day} population={{ live: blobs.length, dead: 0 }} />
+			<HUD
+				day={day}
+				timeRemaining={timeRemaining}
+				population={{ live: blobs.length, dead: deadThisDay }}
+			/>
 
 			<Canvas
 				shadows
@@ -148,6 +174,9 @@ function App() {
 					gravity={[0, -9.8, 0]}
 					defaultContactMaterial={{ restitution: 0.3 }}
 				>
+					{/* Simulation Controller - Runs day/night timer */}
+					<SimulationController foodCount={foodCount} />
+
 					{/* Environment */}
 					<Arena />
 
