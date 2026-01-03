@@ -1,16 +1,28 @@
-# React + Vite
+# Evo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A 3D natural selection simulation inspired by [Primer's "Simulating Natural Selection"](https://www.youtube.com/watch?v=0ZGbIKd0XrM).
 
-Currently, two official plugins are available:
+Watch agents evolve traits like speed, size, and sensing ability as they compete for food across generations.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Quick Start
 
-## React Compiler
+```bash
+bun install
+bun run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Open http://localhost:5173
 
-## Expanding the ESLint configuration
+## Controls
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Orbit**: Click + drag to rotate camera
+- **Zoom**: Scroll wheel
+- **God Mode**: Use the Leva panel (top-right) to adjust blob count, food count, and debug mode
+
+## Tech Stack
+
+React Three Fiber, @react-three/cannon, Zustand, Leva, Vite, Bun
+
+## License
+
+MIT
