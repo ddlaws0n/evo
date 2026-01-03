@@ -6,8 +6,8 @@ interface HUDProps {
 }
 
 /**
- * HUD - Scientific instrument overlay
- * Displays simulation metrics with glassmorphism styling
+ * HUD - Liquid Glass overlay
+ * Displays simulation metrics with Apple-inspired glassmorphism
  * Pure HTML overlay (not Canvas-rendered)
  */
 export function HUD({ day = 1, population = { live: 5, dead: 0 } }: HUDProps) {
@@ -44,16 +44,18 @@ const styles: Record<string, CSSProperties> = {
 	},
 	panel: {
 		position: "absolute",
-		background: "rgba(255, 255, 255, 0.7)",
-		backdropFilter: "blur(12px)",
-		WebkitBackdropFilter: "blur(12px)",
-		border: "1px solid rgba(0, 0, 0, 0.1)",
-		borderRadius: "8px",
-		padding: "12px 16px",
+		background: "rgba(255, 255, 255, 0.35)",
+		backdropFilter: "blur(24px) saturate(180%)",
+		WebkitBackdropFilter: "blur(24px) saturate(180%)",
+		border: "1px solid rgba(255, 255, 255, 0.4)",
+		borderRadius: "20px",
+		padding: "14px 18px",
 		display: "flex",
 		flexDirection: "column",
 		gap: "4px",
 		pointerEvents: "auto",
+		boxShadow:
+			"0 4px 24px -1px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.5)",
 	},
 	topLeft: {
 		top: "20px",
