@@ -74,3 +74,60 @@ useFrame((_, delta) => {
   }
 });
 ```
+
+## Materials & Post-Processing Pitfalls
+
+### SoftShadows + MeshToonMaterial Incompatibility
+
+**CRITICAL:** Drei's `<SoftShadows />` injects PCSS (Percent Closer Soft Shadows) into Three.js shader chunks. This breaks `MeshToonMaterial` shader compilation.
+
+```typescript
+// BROKEN - Causes "Fragment shader is not compiled" error
+<SoftShadows size={25} samples={16} />
+<mesh>
+  <meshToonMaterial color="#4ade80" /> {/* Shader fails! */}
+</mesh>
+
+// WORKS - Don't use SoftShadows with toon materials
+// Use standard shadow-mapSize on directionalLight instead
+<directionalLight shadow-mapSize={[4096, 4096]} />
+```
+
+### Custom Skybox Depth Settings
+
+Custom skybox ShaderMaterial **MUST** disable depth writing or it occludes all scene objects:
+
+```typescript
+// WRONG - Skybox writes to depth buffer, everything else disappears
+new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  // Missing depth settings!
+});
+
+// CORRECT - Skybox renders as background
+new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  depthWrite: false,  // Don't write to depth buffer
+  depthTest: false,   // Don't read from depth buffer
+});
+```
+
+### Unlit Materials for Decorative Objects
+
+Objects that should stay bright regardless of scene lighting (clouds, UI elements, glowing objects) need unlit materials:
+
+```typescript
+// WRONG - Clouds get tinted by hemisphere light ground color
+<mesh>
+  <meshToonMaterial color="#ffffff" /> {/* Turns olive/muddy */}
+</mesh>
+
+// CORRECT - Always bright white regardless of lighting
+<mesh>
+  <meshBasicMaterial color="#ffffff" /> {/* Self-lit, ignores scene lights */}
+</mesh>
+```
+
+### TiltShift2 Post-Processing
+
+`TiltShift2` from `@react-three/postprocessing` works correctly on its own. If the scene disappears when adding it, check for other shader-breaking components (like SoftShadows) first.
