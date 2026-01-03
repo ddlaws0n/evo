@@ -6,6 +6,7 @@ export interface BlobEntity {
 	position: [number, number, number];
 	energy: number;
 	senseRadius: number;
+	foodEaten: number;
 }
 
 export interface FoodEntity {
@@ -25,6 +26,8 @@ interface GameState {
 	setupSimulation: (blobCount: number, foodCount: number) => void;
 	removeFood: (id: string) => void;
 	updateBlobEnergy: (id: string, amount: number) => void;
+	syncBlobPosition: (id: string, position: [number, number, number]) => void;
+	incrementFoodEaten: (id: string) => void;
 }
 
 /**
@@ -65,6 +68,7 @@ export const useGameStore = create<GameState>((set) => ({
 			position: generateBlobPosition(15),
 			energy: 100,
 			senseRadius: 8.0, // Increased from 5.0 for better detection
+			foodEaten: 0,
 		}));
 
 		const foods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
@@ -85,6 +89,22 @@ export const useGameStore = create<GameState>((set) => ({
 		set((state) => ({
 			blobs: state.blobs.map((blob) =>
 				blob.id === id ? { ...blob, energy: blob.energy + amount } : blob,
+			),
+		}));
+	},
+
+	syncBlobPosition: (id: string, position: [number, number, number]) => {
+		set((state) => ({
+			blobs: state.blobs.map((blob) =>
+				blob.id === id ? { ...blob, position } : blob,
+			),
+		}));
+	},
+
+	incrementFoodEaten: (id: string) => {
+		set((state) => ({
+			blobs: state.blobs.map((blob) =>
+				blob.id === id ? { ...blob, foodEaten: blob.foodEaten + 1 } : blob,
 			),
 		}));
 	},
