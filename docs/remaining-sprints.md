@@ -20,22 +20,75 @@ The following infrastructure was added in Sprint 5.5 to unblock genetics:
 
 **Key Deliverables:**
 1.  **Trait System:** Update `BlobEntity` to include a `genome` (Speed, Size, Sense).
-2.  **Visual Variation:** Link `genome.size` to the mesh scale.
+2.  **Phenotype Visualization:** Make genetics visible through diegetic UI.
 3.  **Inheritance Logic:** Create a utility to mix parent genes + random mutation.
 4.  **Reproduction Action:** The mechanics of spawning a new blob near a parent.
 
+#### Phenotype Visualization ("Diegetic UI")
+
+Instead of text overlays, traits are communicated visually through the world itself. This serves as both UX *and* a debugging tool during development.
+
+| Trait | Visual Mapping | Effect |
+|-------|----------------|--------|
+| **Size (r)** | Mesh scale | Giants vs. dwarfs visually obvious |
+| **Speed (v)** | Blue/Cyan tint | Fast blobs look "electric" |
+| **Sense (R)** | Purple/Pink tint | High sense = more "brain power" color |
+
+**Color Logic:**
+- Base color: Neutral (white/grey)
+- High Speed + Low Sense → Blue
+- Low Speed + High Sense → Pink/Magenta
+- High Speed + High Sense → Violet/Indigo
+
+**Why this matters:** When a Blue blob spawns a Blue baby, you *see* inheritance working. If the baby comes out Green, your mutation rate is too high.
+
 **Technical Implementation:**
+
 *   **`src/store/useGameStore.ts`**: Update `BlobEntity`.
     ```typescript
     interface Genome {
-      speed: number;  // Multiplier for steering force
-      size: number;   // Physical radius & energy cost
-      sense: number;  // Detection radius
+      speed: number;  // Multiplier for steering force (0.5 - 2.0)
+      size: number;   // Physical radius & energy cost (0.3 - 1.0)
+      sense: number;  // Detection radius (3.0 - 15.0)
     }
     ```
-*   **`src/utils/genetics.ts` (New)**: Create `mutate(parentGenome): Genome`.
-*   **`src/components/Entities/Blob.tsx`**: Update `useSphere` args to use `genome.size`.
-*   **`src/hooks/useBlobBrain.ts`**: Pass `genome.speed` into `calculateSteeringForce` to affect velocity.
+
+*   **`src/utils/genetics.ts` (New)**: Mutation + color utilities.
+    ```typescript
+    import * as THREE from 'three';
+
+    export function mutate(parentGenome: Genome): Genome { ... }
+
+    export function getBlobColor(speed: number, sense: number): string {
+      // Normalize traits to 0-1 range
+      const normalizedSpeed = (speed - 0.5) / 1.5;
+      const normalizedSense = (sense - 3.0) / 12.0;
+
+      const baseColor = new THREE.Color("#ffffff");
+      const speedColor = new THREE.Color("#00ffff"); // Cyan
+      const senseColor = new THREE.Color("#ff00ff"); // Magenta
+
+      baseColor.lerp(speedColor, normalizedSpeed);
+      baseColor.lerp(senseColor, normalizedSense);
+
+      return "#" + baseColor.getHexString();
+    }
+    ```
+
+*   **`src/components/Entities/Blob.tsx`**: Drive mesh from genome.
+    ```typescript
+    const blobColor = useMemo(() =>
+      getBlobColor(genome.speed, genome.sense),
+    [genome.speed, genome.sense]);
+
+    // Use genome.size for scale, base radius of 1
+    <mesh scale={genome.size}>
+      <sphereGeometry args={[1, 32, 32]} />
+      <meshPhysicalMaterial color={blobColor} ... />
+    </mesh>
+    ```
+
+*   **`src/hooks/useBlobBrain.ts`**: Pass `genome.speed` into steering force calculation.
 
 **The "Gotcha":**
 *   **Physics Explosions:** When spawning a baby, if you spawn it *inside* the parent, the physics engine will violently separate them.
