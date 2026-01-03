@@ -81,7 +81,12 @@ function App() {
 
 					{/* Food - Static resources */}
 					{foods.map((food) => (
-						<Food key={food.id} id={food.id} position={food.position} size={0.4} />
+						<Food
+							key={food.id}
+							id={food.id}
+							position={food.position}
+							size={0.4}
+						/>
 					))}
 				</Physics>
 
