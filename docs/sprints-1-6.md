@@ -1,6 +1,6 @@
-# Sprint History (1-4)
+# Sprint History (1-6)
 
-Historical record of the first four development sprints.
+Historical record of completed development sprints.
 
 ---
 
@@ -219,3 +219,87 @@ The audit recommended "End of Day Snapshot" (Option A). We went further:
 - Avoids Sprint 7 dependency (no day timer needed yet)
 - Zero performance cost (not 60fps, only on discrete events)
 - Store always has "last known position" for baby spawning
+
+---
+
+## Sprint 6: Genetics & Reproduction
+
+**Goal:** Blobs are no longer clones. They carry genetic traits, pass them to offspring with mutation, and reproduce when well-fed.
+
+### Deliverables
+
+1. **Genome System** (`src/utils/genetics.ts`)
+   - `Genome` interface: `speed` (0.5-2.0), `size` (0.3-1.0), `sense` (3.0-15.0)
+   - `createRandomGenome()` - Initial population with random traits
+   - `mutate(genome)` - ±5% variation per trait, clamped to valid ranges
+   - `getBlobColor(speed, sense)` - Diegetic UI via color blending
+
+2. **Store Integration** (`src/store/useGameStore.ts`)
+   - Added `genome: Genome` to `BlobEntity`
+   - `reproduceBlob(parentId, currentPosition)` - Spawns mutated offspring
+   - `resetFoodEaten(id)` - Resets counter after reproduction
+
+3. **Phenotype Visualization** (`src/components/Entities/Blob.tsx`)
+   - Size trait → Physical radius (physics body + mesh)
+   - Speed trait → Cyan tint (high speed = "electric" look)
+   - Sense trait → Magenta tint (high sense = "brainy" look)
+   - Eyes scale proportionally with body size
+
+4. **Movement Modulation** (`src/hooks/useBlobBrain.ts`, `src/utils/steering.ts`)
+   - `speedMultiplier` parameter flows through brain → steering
+   - Forces multiplied by `genome.speed` (fast blobs move faster)
+
+5. **Reproduction Mechanics**
+   - Trigger: `foodEaten >= 2` after eating
+   - Baby spawns at offset `(parentSize + babySize) * 2.5` in random direction
+   - Parent's `foodEaten` resets to 0
+
+6. **Birth Animation**
+   - Visual group wrapper for unified body + eye scaling
+   - 0.4s ease-out with 15% overshoot "pop" effect
+   - Babies appear with satisfying spring animation
+
+### Key Decisions
+
+- **Diegetic UI**: Traits visible through world aesthetics, not text overlays
+- **Subtle mutation (±5%)**: Babies resemble parents, evolution is gradual
+- **Immediate reproduction**: No day timer yet (deferred to Sprint 7)
+- **Position passed to store**: Avoids stale position trap (store only has spawn position)
+
+### Critical Pattern: Stale Position Trap
+
+```typescript
+// WRONG - Store has spawn position, not current position
+reproduceBlob: (parentId) => {
+  const parent = blobs.find(b => b.id === parentId);
+  const babyPos = parent.position; // Stale! This is spawn position
+}
+
+// CORRECT - Pass current physics position from component
+reproduceBlob: (parentId, currentPosition) => {
+  const babyPos = calculateOffset(currentPosition); // Fresh!
+}
+```
+
+### Visual Mapping
+
+| Trait | Range | Visual Effect |
+|-------|-------|---------------|
+| Speed | 0.5 - 2.0 | Pink → Cyan gradient |
+| Size | 0.3 - 1.0 | Physical scale (giants vs dwarfs) |
+| Sense | 3.0 - 15.0 | Pink → Magenta gradient |
+
+### Files Changed
+
+| File | Changes |
+|------|---------|
+| `src/utils/genetics.ts` | **NEW** - Genome type, mutation, color utilities |
+| `src/store/useGameStore.ts` | Genome on BlobEntity, reproduction actions |
+| `src/components/Entities/Blob.tsx` | Phenotype visuals, birth animation, reproduction trigger |
+| `src/hooks/useBlobBrain.ts` | speedMultiplier parameter |
+| `src/utils/steering.ts` | Force scaling by speed trait |
+| `src/App.tsx` | Pass genome prop to Blob component |
+
+### Impact
+
+Blobs now have individuality. You can visually identify fast blobs (cyan) vs sensory blobs (magenta), large vs small. When a cyan blob reproduces, its baby is also cyan (with slight variation). This creates the foundation for natural selection in Sprint 7, where traits will affect survival.
