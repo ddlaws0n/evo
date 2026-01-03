@@ -25,10 +25,10 @@ export function distance2D(
  * @param blobPos Current blob position (x, z)
  * @returns Force vector {x, z} to apply (zero if inside soft boundary)
  */
-export function calculateBoundaryForce(blobPos: {
+export function calculateBoundaryForce(blobPos: { x: number; z: number }): {
 	x: number;
 	z: number;
-}): { x: number; z: number } {
+} {
 	const distanceFromCenter = Math.hypot(blobPos.x, blobPos.z);
 
 	// No force if inside soft boundary
