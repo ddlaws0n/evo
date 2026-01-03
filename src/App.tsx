@@ -157,8 +157,7 @@ function App() {
 							key={blob.id}
 							id={blob.id}
 							position={blob.position}
-							radius={0.5}
-							senseRadius={blob.senseRadius}
+							genome={blob.genome}
 							debugMode={debugMode}
 						/>
 					))}

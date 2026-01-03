@@ -1,17 +1,17 @@
 import type { Triplet } from "@react-three/cannon";
 import { useSphere } from "@react-three/cannon";
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
 import { useGameStore } from "../../store/useGameStore";
+import { type Genome, getBlobColor } from "../../utils/genetics";
 import { ARENA_RADIUS } from "../../utils/steering";
 
 interface BlobProps {
 	id: string;
 	position?: Triplet;
-	radius?: number;
-	senseRadius?: number;
+	genome: Genome;
 	debugMode?: boolean;
 }
 
@@ -32,11 +32,16 @@ const CHOMP_DURATION = 0.15;
 export function Blob({
 	id,
 	position = [0, 2, 0],
-	radius = 0.5,
-	senseRadius = 10.0,
+	genome,
 	debugMode = false,
 }: BlobProps) {
 	const meshRef = useRef<THREE.Mesh>(null);
+
+	// Derive visual properties from genome
+	const blobColor = useMemo(
+		() => getBlobColor(genome.speed, genome.sense),
+		[genome.speed, genome.sense],
+	);
 
 	// Track actual physics position via subscription
 	const physicsPosition = useRef<THREE.Vector3>(new THREE.Vector3(...position));
@@ -48,10 +53,10 @@ export function Blob({
 	// Debug line geometry (imperative updates, no re-renders)
 	const lineGeoRef = useRef<THREE.BufferGeometry>(null);
 
-	// Physics body - dynamic sphere
+	// Physics body - dynamic sphere (size from genome)
 	const [ref, api] = useSphere<THREE.Group>(() => ({
 		mass: 1,
-		args: [radius],
+		args: [genome.size],
 		position,
 		linearDamping: 0.7, // Increased damping to slow down
 		angularDamping: 0.7,
@@ -72,8 +77,15 @@ export function Blob({
 		if (!ref.current || !meshRef.current) return;
 
 		// Get FRESH store state inside useFrame to avoid stale closures
-		const { foods, removeFood, syncBlobPosition, incrementFoodEaten } =
-			useGameStore.getState();
+		const {
+			foods,
+			blobs,
+			removeFood,
+			syncBlobPosition,
+			incrementFoodEaten,
+			resetFoodEaten,
+			reproduceBlob,
+		} = useGameStore.getState();
 
 		// Use subscribed physics position (more accurate than mesh position)
 		const blobPos = physicsPosition.current;
@@ -121,9 +133,10 @@ export function Blob({
 
 		const brainOutput = brain.tick(
 			{ x: blobPos.x, z: blobPos.z },
-			senseRadius,
+			genome.sense,
 			foods,
 			wanderSeed,
+			genome.speed, // Speed multiplier for forces
 		);
 
 		// ===================
@@ -139,10 +152,29 @@ export function Blob({
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
 			removeFood(brainOutput.targetId);
+
+			// Get current food count BEFORE incrementing
+			const currentBlob = blobs.find((b) => b.id === id);
+			const currentFoodEaten = currentBlob?.foodEaten ?? 0;
+
 			incrementFoodEaten(id);
 
-			// Sync position to store (for reproduction spawning)
+			// Sync position to store
 			syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+
+			// ===================
+			// REPRODUCTION CHECK
+			// ===================
+			// If this eat brings us to 2+ food, reproduce
+			if (currentFoodEaten + 1 >= 2) {
+				const currentPos: [number, number, number] = [
+					blobPos.x,
+					blobPos.y,
+					blobPos.z,
+				];
+				reproduceBlob(id, currentPos);
+				resetFoodEaten(id);
+			}
 
 			// Trigger chomp animation
 			isChompingRef.current = true;
@@ -170,13 +202,16 @@ export function Blob({
 		}
 	});
 
+	// Scale factor for eyes (relative to blob size)
+	const eyeScale = genome.size;
+
 	return (
 		<group ref={ref}>
 			{/* Blob Mesh - Gummy/plastic toy material */}
 			<mesh ref={meshRef} castShadow>
-				<sphereGeometry args={[radius, 32, 32]} />
+				<sphereGeometry args={[genome.size, 32, 32]} />
 				<meshPhysicalMaterial
-					color="#f472b6"
+					color={blobColor}
 					transparent
 					opacity={0.9}
 					roughness={0.25}
@@ -188,28 +223,28 @@ export function Blob({
 				/>
 			</mesh>
 
-			{/* Left Eye */}
-			<group position={[-0.12, 0.15, 0.4]}>
+			{/* Left Eye - Position scaled by genome.size */}
+			<group position={[-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
 				<mesh>
-					<sphereGeometry args={[0.08, 16, 16]} />
+					<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
 					<meshStandardMaterial color="#ffffff" roughness={0.1} />
 				</mesh>
 				{/* Pupil */}
-				<mesh position={[0, 0, 0.06]}>
-					<sphereGeometry args={[0.035, 12, 12]} />
+				<mesh position={[0, 0, 0.06 * eyeScale]}>
+					<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
 					<meshStandardMaterial color="#1f2937" />
 				</mesh>
 			</group>
 
-			{/* Right Eye */}
-			<group position={[0.12, 0.15, 0.4]}>
+			{/* Right Eye - Position scaled by genome.size */}
+			<group position={[0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
 				<mesh>
-					<sphereGeometry args={[0.08, 16, 16]} />
+					<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
 					<meshStandardMaterial color="#ffffff" roughness={0.1} />
 				</mesh>
 				{/* Pupil */}
-				<mesh position={[0, 0, 0.06]}>
-					<sphereGeometry args={[0.035, 12, 12]} />
+				<mesh position={[0, 0, 0.06 * eyeScale]}>
+					<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
 					<meshStandardMaterial color="#1f2937" />
 				</mesh>
 			</group>
