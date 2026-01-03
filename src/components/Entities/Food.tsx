@@ -2,16 +2,17 @@ import type { Triplet } from "@react-three/cannon";
 import { useBox } from "@react-three/cannon";
 
 interface FoodProps {
+	id: string;
 	position?: Triplet;
 	size?: number;
 }
 
 /**
  * Food - Static resource entity
- * A glowing box that Blobs will eventually hunt and consume
+ * A glowing box that Blobs hunt and consume
  * Static physics body (doesn't move when hit)
  */
-export function Food({ position = [0, 0.5, 0], size = 0.4 }: FoodProps) {
+export function Food({ id: _id, position = [0, 0.5, 0], size = 0.4 }: FoodProps) {
 	// Static physics body
 	const [ref] = useBox<THREE.Mesh>(() => ({
 		type: "Static",
