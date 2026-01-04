@@ -3,11 +3,16 @@ import { useSphere } from "@react-three/cannon";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import {
+	ARENA_RADIUS,
+	C_SENSE,
+	C_SIZE,
+	C_SPEED,
+} from "../../constants/physics";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
 import { useGameStore } from "../../store/useGameStore";
 import { type Genome, getBlobColor } from "../../utils/genetics";
 import { logAsync } from "../../utils/logger";
-import { ARENA_RADIUS, C_SPEED, C_SIZE, C_SENSE } from "../../constants/physics";
 
 interface BlobProps {
 	id: string;
@@ -72,6 +77,20 @@ export function Blob({
 		[eyeScale],
 	);
 
+	// Memoized eye positions (C6 optimization)
+	const leftEyePosition = useMemo<Triplet>(
+		() => [-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale],
+		[eyeScale],
+	);
+	const rightEyePosition = useMemo<Triplet>(
+		() => [0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale],
+		[eyeScale],
+	);
+	const pupilPosition = useMemo<Triplet>(
+		() => [0, 0, 0.06 * eyeScale],
+		[eyeScale],
+	);
+
 	// Memoized materials (C6 fix)
 	const bodyMaterial = useMemo(
 		() =>
@@ -112,7 +131,15 @@ export function Blob({
 			pupilMaterial.dispose();
 			debugLineMaterial.dispose();
 		};
-	}, [bodyGeometry, eyeGeometry, pupilGeometry, bodyMaterial, eyeWhiteMaterial, pupilMaterial, debugLineMaterial]);
+	}, [
+		bodyGeometry,
+		eyeGeometry,
+		pupilGeometry,
+		bodyMaterial,
+		eyeWhiteMaterial,
+		pupilMaterial,
+		debugLineMaterial,
+	]);
 
 	// Track actual physics position via subscription
 	const physicsPosition = useRef<THREE.Vector3>(new THREE.Vector3(...position));
@@ -139,7 +166,10 @@ export function Blob({
 	// Pre-allocated Vector3 for debug visualization to avoid GC pressure (C7 fix)
 	const debugLineStartRef = useRef(new THREE.Vector3());
 	const debugLineEndRef = useRef(new THREE.Vector3());
-	const debugLinePointsRef = useRef([debugLineStartRef.current, debugLineEndRef.current]);
+	const debugLinePointsRef = useRef([
+		debugLineStartRef.current,
+		debugLineEndRef.current,
+	]);
 
 	// Track consumed food/prey to prevent double-counting (C3 fix)
 	const consumedTargetsRef = useRef<Set<string>>(new Set());
@@ -264,7 +294,9 @@ export function Blob({
 			// Separate additive terms ensure each trait has independent cost (C4 fix)
 			// Multiply by 60 to normalize for 60fps (delta is ~0.016 at 60fps)
 			const energyCost =
-				(C_SPEED * speed ** 2 + C_SIZE * size ** 3 + C_SENSE * sense) * delta * 60;
+				(C_SPEED * speed ** 2 + C_SIZE * size ** 3 + C_SENSE * sense) *
+				delta *
+				60;
 			energyRef.current -= energyCost;
 
 			// Clamp energy to 0 minimum (death happens at judgment, not here)
@@ -343,7 +375,9 @@ export function Blob({
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
 			// Check if we've already consumed this target (prevents double-counting)
-			const alreadyConsumed = consumedTargetsRef.current.has(brainOutput.targetId);
+			const alreadyConsumed = consumedTargetsRef.current.has(
+				brainOutput.targetId,
+			);
 
 			if (brainOutput.targetType === "food" && !alreadyConsumed) {
 				// Validate target still exists (H1 fix)
@@ -432,17 +466,25 @@ export function Blob({
 				<mesh castShadow geometry={bodyGeometry} material={bodyMaterial} />
 
 				{/* Left Eye - Position scaled relative to BASE_RADIUS */}
-				<group position={[-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
+				<group position={leftEyePosition}>
 					<mesh geometry={eyeGeometry} material={eyeWhiteMaterial} />
 					{/* Pupil */}
-					<mesh position={[0, 0, 0.06 * eyeScale]} geometry={pupilGeometry} material={pupilMaterial} />
+					<mesh
+						position={pupilPosition}
+						geometry={pupilGeometry}
+						material={pupilMaterial}
+					/>
 				</group>
 
 				{/* Right Eye - Position scaled relative to BASE_RADIUS */}
-				<group position={[0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
+				<group position={rightEyePosition}>
 					<mesh geometry={eyeGeometry} material={eyeWhiteMaterial} />
 					{/* Pupil */}
-					<mesh position={[0, 0, 0.06 * eyeScale]} geometry={pupilGeometry} material={pupilMaterial} />
+					<mesh
+						position={pupilPosition}
+						geometry={pupilGeometry}
+						material={pupilMaterial}
+					/>
 				</group>
 			</group>
 

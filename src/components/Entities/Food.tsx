@@ -4,6 +4,9 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
+// Static rotation for leaf (C6 optimization)
+const LEAF_ROTATION: Triplet = [0, 0, Math.PI / 4];
+
 interface FoodProps {
 	id: string;
 	position?: Triplet;
@@ -25,6 +28,16 @@ export function Food({
 	const visualRef = useRef<THREE.Group>(null);
 
 	const appleRadius = size * 0.6;
+
+	// Memoized positions (C6 optimization)
+	const stemPosition = useMemo<Triplet>(
+		() => [0, appleRadius + 0.04, 0],
+		[appleRadius],
+	);
+	const leafPosition = useMemo<Triplet>(
+		() => [0.06, appleRadius + 0.08, 0],
+		[appleRadius],
+	);
 
 	// Memoized geometries (C6 fix)
 	const appleGeometry = useMemo(
@@ -66,7 +79,14 @@ export function Food({
 			stemMaterial.dispose();
 			leafMaterial.dispose();
 		};
-	}, [appleGeometry, stemGeometry, leafGeometry, appleMaterial, stemMaterial, leafMaterial]);
+	}, [
+		appleGeometry,
+		stemGeometry,
+		leafGeometry,
+		appleMaterial,
+		stemMaterial,
+		leafMaterial,
+	]);
 
 	// Ghost physics body - stationary anchor
 	const [physicsRef] = useBox<THREE.Group>(() => ({
@@ -94,7 +114,7 @@ export function Food({
 
 				{/* Stem - brown cylinder */}
 				<mesh
-					position={[0, appleRadius + 0.04, 0]}
+					position={stemPosition}
 					castShadow
 					geometry={stemGeometry}
 					material={stemMaterial}
@@ -102,8 +122,8 @@ export function Food({
 
 				{/* Leaf - small green plane */}
 				<mesh
-					position={[0.06, appleRadius + 0.08, 0]}
-					rotation={[0, 0, Math.PI / 4]}
+					position={leafPosition}
+					rotation={LEAF_ROTATION}
 					geometry={leafGeometry}
 					material={leafMaterial}
 				/>
