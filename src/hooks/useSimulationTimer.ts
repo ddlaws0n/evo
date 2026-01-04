@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useGameStore } from "../store/useGameStore";
 
 const DAY_DURATION = 30; // seconds
@@ -22,6 +22,12 @@ export function useSimulationTimer(foodCount: number) {
 	const sunsetTimerRef = useRef(0);
 	const nightTimerRef = useRef(0);
 	const lastSyncedTimeRef = useRef(DAY_DURATION);
+
+	// Track latest foodCount to avoid stale closure (H8 fix)
+	const foodCountRef = useRef(foodCount);
+	useEffect(() => {
+		foodCountRef.current = foodCount;
+	}, [foodCount]);
 
 	useFrame((_, delta) => {
 		const { phase, setTimeRemaining, startSunset, startNight, runJudgment } =
@@ -65,8 +71,8 @@ export function useSimulationTimer(foodCount: number) {
 			nightTimerRef.current += delta;
 
 			if (nightTimerRef.current >= NIGHT_DURATION) {
-				// Run judgment and reset to DAY
-				runJudgment(foodCount);
+				// Run judgment and reset to DAY (use ref for latest value)
+				runJudgment(foodCountRef.current);
 				timeRef.current = DAY_DURATION;
 				lastSyncedTimeRef.current = DAY_DURATION;
 				nightTimerRef.current = 0;

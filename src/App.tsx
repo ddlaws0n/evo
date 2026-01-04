@@ -88,16 +88,20 @@ function App() {
 		debugMode: { value: false, label: "Debug Mode" },
 	});
 
-	// Game state from store
-	const {
-		blobs,
-		foods,
-		day,
-		phase,
-		timeRemaining,
-		deadThisDay,
-		setupSimulation,
-	} = useGameStore();
+	// Game state from store - using selectors to prevent unnecessary re-renders (C5 fix)
+	const blobs = useGameStore((state) => state.blobs);
+	const foods = useGameStore((state) => state.foods);
+	const day = useGameStore((state) => state.day);
+	const phase = useGameStore((state) => state.phase);
+	const timeRemaining = useGameStore((state) => state.timeRemaining);
+	const deadThisDay = useGameStore((state) => state.deadThisDay);
+	const setupSimulation = useGameStore((state) => state.setupSimulation);
+
+	// Memoize population object to prevent HUD re-renders (C8 fix)
+	const population = useMemo(
+		() => ({ live: blobs.length, dead: deadThisDay }),
+		[blobs.length, deadThisDay],
+	);
 
 	// Initialize simulation when counts change
 	useEffect(() => {
@@ -110,11 +114,7 @@ function App() {
 			<NightOverlay phase={phase} />
 
 			{/* HUD Overlay - HTML layer */}
-			<HUD
-				day={day}
-				timeRemaining={timeRemaining}
-				population={{ live: blobs.length, dead: deadThisDay }}
-			/>
+			<HUD day={day} timeRemaining={timeRemaining} population={population} />
 
 			<Canvas
 				shadows
