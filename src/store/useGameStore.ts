@@ -2,6 +2,15 @@ import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import { createRandomGenome, type Genome, mutate } from "../utils/genetics";
 import { logAsync } from "../utils/logger";
+import {
+	createSpatialGrid,
+	gridInsert,
+	gridQueryRadius,
+	gridRemove,
+	gridUpdate,
+	rebuildGrid,
+	type SpatialGrid,
+} from "../utils/spatialGrid";
 import { SPAWN_RADIUS } from "../utils/steering";
 
 export type SimulationPhase = "DAY" | "SUNSET" | "NIGHT";
@@ -30,6 +39,10 @@ interface GameState {
 	// Entity lookup maps for O(1) access (C9 fix)
 	blobsById: Map<string, BlobEntity>;
 	foodsById: Map<string, FoodEntity>;
+
+	// Spatial grids for O(N) entity detection (C1 fix)
+	blobGrid: SpatialGrid;
+	foodGrid: SpatialGrid;
 
 	// Simulation state
 	day: number;
@@ -62,6 +75,9 @@ interface GameState {
 		predatorId: string,
 		predatorPosition: [number, number, number],
 	) => void;
+	// Spatial grid queries (C1 fix)
+	getNearbyBlobIds: (x: number, z: number, radius: number) => string[];
+	getNearbyFoodIds: (x: number, z: number, radius: number) => string[];
 }
 
 /**
@@ -99,11 +115,13 @@ const buildBlobMap = (blobs: BlobEntity[]): Map<string, BlobEntity> =>
 const buildFoodMap = (foods: FoodEntity[]): Map<string, FoodEntity> =>
 	new Map(foods.map((f) => [f.id, f]));
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
 	blobs: [],
 	foods: [],
 	blobsById: new Map(),
 	foodsById: new Map(),
+	blobGrid: createSpatialGrid(5), // 5-unit cells for optimal performance
+	foodGrid: createSpatialGrid(5),
 	day: 1,
 	phase: "DAY",
 	timeRemaining: 30,
@@ -126,11 +144,19 @@ export const useGameStore = create<GameState>((set) => ({
 			position: generateFoodPosition(12), // Center area
 		}));
 
+		// Build spatial grids
+		const blobGrid = createSpatialGrid(5);
+		const foodGrid = createSpatialGrid(5);
+		rebuildGrid(blobGrid, blobs);
+		rebuildGrid(foodGrid, foods);
+
 		set({
 			blobs,
 			foods,
 			blobsById: buildBlobMap(blobs),
 			foodsById: buildFoodMap(foods),
+			blobGrid,
+			foodGrid,
 			day: 1,
 			phase: "DAY",
 			timeRemaining: 30,
@@ -144,6 +170,8 @@ export const useGameStore = create<GameState>((set) => ({
 			// Copy map and delete entry (O(1)) instead of rebuilding (O(N))
 			const newFoodsById = new Map(state.foodsById);
 			newFoodsById.delete(id);
+			// Remove from spatial grid
+			gridRemove(state.foodGrid, id);
 			return {
 				foods: newFoods,
 				foodsById: newFoodsById,
@@ -181,6 +209,8 @@ export const useGameStore = create<GameState>((set) => ({
 			);
 			const newBlobsById = new Map(state.blobsById);
 			newBlobsById.set(id, updatedBlob);
+			// Update spatial grid position
+			gridUpdate(state.blobGrid, id, position);
 			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
@@ -254,6 +284,8 @@ export const useGameStore = create<GameState>((set) => ({
 			// Copy map and add single entry (O(1)) instead of rebuilding (O(N))
 			const newBlobsById = new Map(state.blobsById);
 			newBlobsById.set(baby.id, baby);
+			// Add to spatial grid
+			gridInsert(state.blobGrid, baby.id, baby.position);
 			return {
 				blobs: newBlobs,
 				blobsById: newBlobsById,
@@ -346,11 +378,19 @@ export const useGameStore = create<GameState>((set) => ({
 			);
 
 			const newBlobs = [...survivors, ...babies];
+			// Rebuild spatial grids after judgment
+			const blobGrid = createSpatialGrid(5);
+			const foodGrid = createSpatialGrid(5);
+			rebuildGrid(blobGrid, newBlobs);
+			rebuildGrid(foodGrid, newFoods);
+
 			return {
 				blobs: newBlobs,
 				foods: newFoods,
 				blobsById: buildBlobMap(newBlobs),
 				foodsById: buildFoodMap(newFoods),
+				blobGrid,
+				foodGrid,
 				day: state.day + 1,
 				phase: "DAY" as SimulationPhase,
 				timeRemaining: 30,
@@ -370,6 +410,8 @@ export const useGameStore = create<GameState>((set) => ({
 			// Copy map and delete entry (O(1)) instead of rebuilding (O(N))
 			const newBlobsById = new Map(state.blobsById);
 			newBlobsById.delete(id);
+			// Remove from spatial grid
+			gridRemove(state.blobGrid, id);
 			return {
 				blobs: newBlobs,
 				blobsById: newBlobsById,
@@ -399,5 +441,19 @@ export const useGameStore = create<GameState>((set) => ({
 			newBlobsById.set(preyId, updatedBlob);
 			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
+	},
+
+	// ===================
+	// SPATIAL GRID QUERIES (C1 fix)
+	// ===================
+
+	getNearbyBlobIds: (x: number, z: number, radius: number) => {
+		const state = get();
+		return gridQueryRadius(state.blobGrid, x, z, radius);
+	},
+
+	getNearbyFoodIds: (x: number, z: number, radius: number) => {
+		const state = get();
+		return gridQueryRadius(state.foodGrid, x, z, radius);
 	},
 }));
