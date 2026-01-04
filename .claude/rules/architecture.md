@@ -39,6 +39,32 @@
 2. **Use InstancedMesh** when entity count exceeds 50
 3. **Subscribe to physics position** rather than reading mesh position
 4. **Batch store updates** when possible (single `set()` call)
+5. **Use spatial grid for entity queries** - never iterate all entities in hot paths
+
+## Spatial Partitioning
+
+The simulation uses a uniform spatial grid (`src/utils/spatialGrid.ts`) to optimize entity detection from O(N²) to O(N).
+
+**Grid structure:**
+- Cell size: 5 units (matches typical sense radius)
+- Arena coverage: 7×7 grid over 34×34 arena
+- Stored in Zustand: `blobGrid`, `foodGrid`
+
+**Query pattern:**
+```typescript
+// DON'T: Iterate all entities
+for (const blob of blobs) { ... }  // O(N)
+
+// DO: Query spatial grid
+const nearbyIds = getNearbyBlobIds(x, z, radius);  // O(1) per cell
+const nearbyBlobs = nearbyIds.map(id => blobsById.get(id));
+```
+
+**Grid maintenance:**
+- `gridInsert()` - when entity spawns
+- `gridUpdate()` - when entity moves (only if cell changed)
+- `gridRemove()` - when entity dies
+- `rebuildGrid()` - after day reset/judgment
 
 ## File Placement
 

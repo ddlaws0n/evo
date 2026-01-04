@@ -10,7 +10,11 @@ import {
 	C_SPEED,
 } from "../../constants/physics";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
-import { useGameStore } from "../../store/useGameStore";
+import {
+	type BlobEntity,
+	type FoodEntity,
+	useGameStore,
+} from "../../store/useGameStore";
 import { type Genome, getBlobColor } from "../../utils/genetics";
 import { logAsync } from "../../utils/logger";
 
@@ -199,8 +203,6 @@ export function Blob({
 
 		// Get FRESH store state inside useFrame to avoid stale closures
 		const {
-			foods,
-			blobs,
 			blobsById,
 			foodsById,
 			phase,
@@ -210,6 +212,8 @@ export function Blob({
 			syncBlobPosition,
 			incrementFoodEaten,
 			markBlobAsEaten,
+			getNearbyBlobIds,
+			getNearbyFoodIds,
 		} = useGameStore.getState();
 
 		// Use subscribed physics position (more accurate than mesh position)
@@ -344,11 +348,22 @@ export function Blob({
 		const wanderSeed =
 			state.clock.getElapsedTime() * 2 + position[0] + position[2];
 
+		// Get nearby entities using spatial grid (C1 fix: O(N) instead of O(N²))
+		const nearbyBlobIds = getNearbyBlobIds(blobPos.x, blobPos.z, genome.sense);
+		const nearbyBlobs = nearbyBlobIds
+			.map((blobId) => blobsById.get(blobId))
+			.filter((b): b is BlobEntity => b !== undefined);
+
+		const nearbyFoodIds = getNearbyFoodIds(blobPos.x, blobPos.z, genome.sense);
+		const nearbyFoods = nearbyFoodIds
+			.map((foodId) => foodsById.get(foodId))
+			.filter((f): f is FoodEntity => f !== undefined);
+
 		const brainOutput = brain.tick(
 			{ x: blobPos.x, z: blobPos.z },
 			genome.sense,
-			foods,
-			blobs,
+			nearbyFoods,
+			nearbyBlobs,
 			id,
 			genome.size,
 			wanderSeed,

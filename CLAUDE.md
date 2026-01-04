@@ -34,7 +34,8 @@ src/
 ├── App.tsx              # Canvas + Leva controls
 ├── store/               # Zustand stores (useGameStore)
 ├── hooks/               # Custom hooks (useBlobBrain - FSM logic)
-├── utils/               # Pure functions (steering.ts)
+├── utils/               # Pure functions (steering.ts, spatialGrid.ts)
+├── constants/           # Physics constants (physics.ts)
 ├── components/
 │   ├── Entities/        # Blob, Food
 │   ├── World/           # Arena, Effects
