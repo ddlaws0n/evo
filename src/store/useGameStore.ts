@@ -141,46 +141,74 @@ export const useGameStore = create<GameState>((set) => ({
 	removeFood: (id: string) => {
 		set((state) => {
 			const newFoods = state.foods.filter((food) => food.id !== id);
+			// Copy map and delete entry (O(1)) instead of rebuilding (O(N))
+			const newFoodsById = new Map(state.foodsById);
+			newFoodsById.delete(id);
 			return {
 				foods: newFoods,
-				foodsById: buildFoodMap(newFoods),
+				foodsById: newFoodsById,
 			};
 		});
 	},
 
 	updateBlobEnergy: (id: string, amount: number) => {
 		set((state) => {
+			const existingBlob = state.blobsById.get(id);
+			if (!existingBlob) return state;
+
+			const updatedBlob = { ...existingBlob, energy: existingBlob.energy + amount };
 			const newBlobs = state.blobs.map((blob) =>
-				blob.id === id ? { ...blob, energy: blob.energy + amount } : blob,
+				blob.id === id ? updatedBlob : blob,
 			);
-			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+			// Copy map and update single entry (O(1)) instead of rebuilding (O(N))
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(id, updatedBlob);
+			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
 
 	syncBlobPosition: (id: string, position: [number, number, number]) => {
 		set((state) => {
+			const existingBlob = state.blobsById.get(id);
+			if (!existingBlob) return state;
+
+			const updatedBlob = { ...existingBlob, position };
 			const newBlobs = state.blobs.map((blob) =>
-				blob.id === id ? { ...blob, position } : blob,
+				blob.id === id ? updatedBlob : blob,
 			);
-			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(id, updatedBlob);
+			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
 
 	incrementFoodEaten: (id: string) => {
 		set((state) => {
+			const existingBlob = state.blobsById.get(id);
+			if (!existingBlob) return state;
+
+			const updatedBlob = { ...existingBlob, foodEaten: existingBlob.foodEaten + 1 };
 			const newBlobs = state.blobs.map((blob) =>
-				blob.id === id ? { ...blob, foodEaten: blob.foodEaten + 1 } : blob,
+				blob.id === id ? updatedBlob : blob,
 			);
-			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(id, updatedBlob);
+			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
 
 	resetFoodEaten: (id: string) => {
 		set((state) => {
+			const existingBlob = state.blobsById.get(id);
+			if (!existingBlob) return state;
+
+			const updatedBlob = { ...existingBlob, foodEaten: 0 };
 			const newBlobs = state.blobs.map((blob) =>
-				blob.id === id ? { ...blob, foodEaten: 0 } : blob,
+				blob.id === id ? updatedBlob : blob,
 			);
-			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(id, updatedBlob);
+			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
 
@@ -217,9 +245,12 @@ export const useGameStore = create<GameState>((set) => ({
 			};
 
 			const newBlobs = [...state.blobs, baby];
+			// Copy map and add single entry (O(1)) instead of rebuilding (O(N))
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(baby.id, baby);
 			return {
 				blobs: newBlobs,
-				blobsById: buildBlobMap(newBlobs),
+				blobsById: newBlobsById,
 			};
 		});
 	},
@@ -330,9 +361,12 @@ export const useGameStore = create<GameState>((set) => ({
 		logAsync(`💀 Blob removed | ID: ${id.slice(0, 8)}`);
 		set((state) => {
 			const newBlobs = state.blobs.filter((blob) => blob.id !== id);
+			// Copy map and delete entry (O(1)) instead of rebuilding (O(N))
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.delete(id);
 			return {
 				blobs: newBlobs,
-				blobsById: buildBlobMap(newBlobs),
+				blobsById: newBlobsById,
 				deadThisDay: state.deadThisDay + 1,
 			};
 		});
@@ -344,16 +378,20 @@ export const useGameStore = create<GameState>((set) => ({
 		predatorPosition: [number, number, number],
 	) => {
 		set((state) => {
+			const existingBlob = state.blobsById.get(preyId);
+			if (!existingBlob) return state;
+
+			const updatedBlob = {
+				...existingBlob,
+				beingEatenBy: predatorId,
+				beingEatenPosition: predatorPosition,
+			};
 			const newBlobs = state.blobs.map((blob) =>
-				blob.id === preyId
-					? {
-							...blob,
-							beingEatenBy: predatorId,
-							beingEatenPosition: predatorPosition,
-						}
-					: blob,
+				blob.id === preyId ? updatedBlob : blob,
 			);
-			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+			const newBlobsById = new Map(state.blobsById);
+			newBlobsById.set(preyId, updatedBlob);
+			return { blobs: newBlobs, blobsById: newBlobsById };
 		});
 	},
 }));

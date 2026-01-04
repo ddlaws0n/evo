@@ -340,9 +340,9 @@ Creates new objects with 8 properties per frame, many unused depending on state.
 Animation durations, physics constants, and game rules spread across files without centralization.
 
 ### L7. Potential Circular Import Risk
-**Files:** `useBlobBrain.ts` → `steering.ts` → `useGameStore.ts` → `steering.ts`
+**Files:** `steering.ts` ↔ `useGameStore.ts`
 
-Import chain could become circular if not careful during refactoring.
+Import chain shows bidirectional dependency that could become problematic during refactoring.
 
 ### L8. Conservative Mutation Rate
 **File:** `src/utils/genetics.ts:61-73`
