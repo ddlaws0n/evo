@@ -115,9 +115,7 @@ export function gridQueryRadius(
 			const key = `${centerCellX + dx},${centerCellZ + dz}`;
 			const cell = grid.cells.get(key);
 			if (cell) {
-				for (const id of cell) {
-					results.push(id);
-				}
+				results.push(...cell);
 			}
 		}
 	}
