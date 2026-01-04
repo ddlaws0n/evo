@@ -3,11 +3,16 @@ import { useSphere } from "@react-three/cannon";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import {
+	ARENA_RADIUS,
+	C_SENSE,
+	C_SIZE,
+	C_SPEED,
+} from "../../constants/physics";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
 import { useGameStore } from "../../store/useGameStore";
 import { type Genome, getBlobColor } from "../../utils/genetics";
 import { logAsync } from "../../utils/logger";
-import { ARENA_RADIUS, C_MOVE, C_SENSE } from "../../constants/physics";
 
 interface BlobProps {
 	id: string;
@@ -55,6 +60,87 @@ export function Blob({
 		[genome.speed, genome.sense],
 	);
 
+	// Scale factor for eyes - positions were designed for BASE_RADIUS (0.5)
+	const eyeScale = genome.size / BASE_RADIUS;
+
+	// Memoized geometries to prevent recreation every render (C6 fix)
+	const bodyGeometry = useMemo(
+		() => new THREE.SphereGeometry(genome.size, 32, 32),
+		[genome.size],
+	);
+	const eyeGeometry = useMemo(
+		() => new THREE.SphereGeometry(0.08 * eyeScale, 16, 16),
+		[eyeScale],
+	);
+	const pupilGeometry = useMemo(
+		() => new THREE.SphereGeometry(0.035 * eyeScale, 12, 12),
+		[eyeScale],
+	);
+
+	// Memoized eye positions (C6 optimization)
+	const leftEyePosition = useMemo<Triplet>(
+		() => [-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale],
+		[eyeScale],
+	);
+	const rightEyePosition = useMemo<Triplet>(
+		() => [0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale],
+		[eyeScale],
+	);
+	const pupilPosition = useMemo<Triplet>(
+		() => [0, 0, 0.06 * eyeScale],
+		[eyeScale],
+	);
+
+	// Memoized materials (C6 fix)
+	const bodyMaterial = useMemo(
+		() =>
+			new THREE.MeshPhysicalMaterial({
+				color: blobColor,
+				transparent: true,
+				opacity: 0.9,
+				roughness: 0.25,
+				metalness: 0.05,
+				clearcoat: 0.5,
+				clearcoatRoughness: 0.3,
+				transmission: 0.1,
+				thickness: 0.5,
+			}),
+		[blobColor],
+	);
+	const eyeWhiteMaterial = useMemo(
+		() => new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.1 }),
+		[],
+	);
+	const pupilMaterial = useMemo(
+		() => new THREE.MeshStandardMaterial({ color: "#1f2937" }),
+		[],
+	);
+	const debugLineMaterial = useMemo(
+		() => new THREE.LineBasicMaterial({ color: "yellow" }),
+		[],
+	);
+
+	// Cleanup geometries and materials on unmount (C6 fix)
+	useEffect(() => {
+		return () => {
+			bodyGeometry.dispose();
+			eyeGeometry.dispose();
+			pupilGeometry.dispose();
+			bodyMaterial.dispose();
+			eyeWhiteMaterial.dispose();
+			pupilMaterial.dispose();
+			debugLineMaterial.dispose();
+		};
+	}, [
+		bodyGeometry,
+		eyeGeometry,
+		pupilGeometry,
+		bodyMaterial,
+		eyeWhiteMaterial,
+		pupilMaterial,
+		debugLineMaterial,
+	]);
+
 	// Track actual physics position via subscription
 	const physicsPosition = useRef<THREE.Vector3>(new THREE.Vector3(...position));
 
@@ -76,6 +162,14 @@ export function Blob({
 
 	// Debug line geometry (imperative updates, no re-renders)
 	const lineGeoRef = useRef<THREE.BufferGeometry>(null);
+
+	// Pre-allocated Vector3 for debug visualization to avoid GC pressure (C7 fix)
+	const debugLineStartRef = useRef(new THREE.Vector3());
+	const debugLineEndRef = useRef(new THREE.Vector3());
+	const debugLinePointsRef = useRef([
+		debugLineStartRef.current,
+		debugLineEndRef.current,
+	]);
 
 	// Track consumed food/prey to prevent double-counting (C3 fix)
 	const consumedTargetsRef = useRef<Set<string>>(new Set());
@@ -196,10 +290,13 @@ export function Blob({
 		// Only decay energy during DAY phase
 		if (phase === "DAY") {
 			const { size, speed, sense } = genome;
-			// Formula: Cost = C_MOVE * (size^3 * speed^2) + C_SENSE * sense
+			// Formula: Cost = (C_SPEED * speed²) + (C_SIZE * size³) + (C_SENSE * sense)
+			// Separate additive terms ensure each trait has independent cost (C4 fix)
 			// Multiply by 60 to normalize for 60fps (delta is ~0.016 at 60fps)
 			const energyCost =
-				(C_MOVE * size ** 3 * speed ** 2 + C_SENSE * sense) * delta * 60;
+				(C_SPEED * speed ** 2 + C_SIZE * size ** 3 + C_SENSE * sense) *
+				delta *
+				60;
 			energyRef.current -= energyCost;
 
 			// Clamp energy to 0 minimum (death happens at judgment, not here)
@@ -278,9 +375,15 @@ export function Blob({
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
 			// Check if we've already consumed this target (prevents double-counting)
-			const alreadyConsumed = consumedTargetsRef.current.has(brainOutput.targetId);
+			const alreadyConsumed = consumedTargetsRef.current.has(
+				brainOutput.targetId,
+			);
 
 			if (brainOutput.targetType === "food" && !alreadyConsumed) {
+				// Validate target still exists (H1 fix)
+				const targetFood = foodsById.get(brainOutput.targetId);
+				if (!targetFood) return; // Food was eaten by another blob
+
 				// Mark as consumed FIRST to prevent re-entry
 				consumedTargetsRef.current.add(brainOutput.targetId);
 
@@ -300,29 +403,34 @@ export function Blob({
 				isChompingRef.current = true;
 				chompTimeRef.current = 0;
 			} else if (brainOutput.targetType === "blob" && !alreadyConsumed) {
+				// Gate predation to DAY phase only (H5 fix)
+				// Prevents free energy gain during SUNSET when energy decay is paused
+				if (phase !== "DAY") return;
+
 				// Eating another blob (predation) - C9: O(1) Map lookup
+				// Validate target still exists and isn't being eaten (H1 fix)
 				const prey = blobsById.get(brainOutput.targetId);
-				if (prey && !prey.beingEatenBy) {
-					// Mark as consumed FIRST to prevent re-entry
-					consumedTargetsRef.current.add(brainOutput.targetId);
+				if (!prey || prey.beingEatenBy) return;
 
-					// Mark prey as being eaten (triggers absorption animation on prey)
-					markBlobAsEaten(prey.id, id, [blobPos.x, blobPos.y, blobPos.z]);
+				// Mark as consumed FIRST to prevent re-entry
+				consumedTargetsRef.current.add(brainOutput.targetId);
 
-					// Gain energy from prey (proportional to prey size)
-					const preyEnergy = prey.genome.size * ENERGY_PREY_MULTIPLIER;
-					energyRef.current = Math.min(100, energyRef.current + preyEnergy);
+				// Mark prey as being eaten (triggers absorption animation on prey)
+				markBlobAsEaten(prey.id, id, [blobPos.x, blobPos.y, blobPos.z]);
 
-					// Increment food counter (reproduction happens at end of day)
-					incrementFoodEaten(id);
+				// Gain energy from prey (proportional to prey size)
+				const preyEnergy = prey.genome.size * ENERGY_PREY_MULTIPLIER;
+				energyRef.current = Math.min(100, energyRef.current + preyEnergy);
 
-					// Sync position
-					syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+				// Increment food counter (reproduction happens at end of day)
+				incrementFoodEaten(id);
 
-					// Trigger chomp animation
-					isChompingRef.current = true;
-					chompTimeRef.current = 0;
-				}
+				// Sync position
+				syncBlobPosition(id, [blobPos.x, blobPos.y, blobPos.z]);
+
+				// Trigger chomp animation
+				isChompingRef.current = true;
+				chompTimeRef.current = 0;
 			}
 		}
 
@@ -342,63 +450,41 @@ export function Blob({
 			}
 
 			if (targetPos && lineGeoRef.current) {
-				const points = [
-					new THREE.Vector3(blobPos.x, blobPos.y, blobPos.z),
-					new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]),
-				];
-				lineGeoRef.current.setFromPoints(points);
+				// Use pre-allocated vectors to avoid GC pressure (C7 fix)
+				debugLineStartRef.current.set(blobPos.x, blobPos.y, blobPos.z);
+				debugLineEndRef.current.set(targetPos[0], targetPos[1], targetPos[2]);
+				lineGeoRef.current.setFromPoints(debugLinePointsRef.current);
 			}
 		}
 	});
-
-	// Scale factor for eyes - positions were designed for BASE_RADIUS (0.5)
-	// So we scale relative to that baseline to maintain proportions
-	const eyeScale = genome.size / BASE_RADIUS;
 
 	return (
 		<group ref={ref}>
 			{/* Visual Group - Contains body + eyes, scaled together for animations */}
 			<group ref={visualGroupRef}>
-				{/* Blob Mesh - Gummy/plastic toy material */}
-				<mesh castShadow>
-					<sphereGeometry args={[genome.size, 32, 32]} />
-					<meshPhysicalMaterial
-						color={blobColor}
-						transparent
-						opacity={0.9}
-						roughness={0.25}
-						metalness={0.05}
-						clearcoat={0.5}
-						clearcoatRoughness={0.3}
-						transmission={0.1}
-						thickness={0.5}
-					/>
-				</mesh>
+				{/* Blob Mesh - Gummy/plastic toy material (C6: memoized geometry/material) */}
+				<mesh castShadow geometry={bodyGeometry} material={bodyMaterial} />
 
 				{/* Left Eye - Position scaled relative to BASE_RADIUS */}
-				<group position={[-0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
-					<mesh>
-						<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
-						<meshStandardMaterial color="#ffffff" roughness={0.1} />
-					</mesh>
+				<group position={leftEyePosition}>
+					<mesh geometry={eyeGeometry} material={eyeWhiteMaterial} />
 					{/* Pupil */}
-					<mesh position={[0, 0, 0.06 * eyeScale]}>
-						<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
-						<meshStandardMaterial color="#1f2937" />
-					</mesh>
+					<mesh
+						position={pupilPosition}
+						geometry={pupilGeometry}
+						material={pupilMaterial}
+					/>
 				</group>
 
 				{/* Right Eye - Position scaled relative to BASE_RADIUS */}
-				<group position={[0.12 * eyeScale, 0.15 * eyeScale, 0.4 * eyeScale]}>
-					<mesh>
-						<sphereGeometry args={[0.08 * eyeScale, 16, 16]} />
-						<meshStandardMaterial color="#ffffff" roughness={0.1} />
-					</mesh>
+				<group position={rightEyePosition}>
+					<mesh geometry={eyeGeometry} material={eyeWhiteMaterial} />
 					{/* Pupil */}
-					<mesh position={[0, 0, 0.06 * eyeScale]}>
-						<sphereGeometry args={[0.035 * eyeScale, 12, 12]} />
-						<meshStandardMaterial color="#1f2937" />
-					</mesh>
+					<mesh
+						position={pupilPosition}
+						geometry={pupilGeometry}
+						material={pupilMaterial}
+					/>
 				</group>
 			</group>
 
@@ -406,7 +492,7 @@ export function Blob({
 			{debugMode && (
 				<line>
 					<bufferGeometry ref={lineGeoRef} />
-					<lineBasicMaterial color="yellow" />
+					<primitive object={debugLineMaterial} attach="material" />
 				</line>
 			)}
 		</group>

@@ -156,7 +156,10 @@ export const useGameStore = create<GameState>((set) => ({
 			const existingBlob = state.blobsById.get(id);
 			if (!existingBlob) return state;
 
-			const updatedBlob = { ...existingBlob, energy: existingBlob.energy + amount };
+			const updatedBlob = {
+				...existingBlob,
+				energy: existingBlob.energy + amount,
+			};
 			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? updatedBlob : blob,
 			);
@@ -187,7 +190,10 @@ export const useGameStore = create<GameState>((set) => ({
 			const existingBlob = state.blobsById.get(id);
 			if (!existingBlob) return state;
 
-			const updatedBlob = { ...existingBlob, foodEaten: existingBlob.foodEaten + 1 };
+			const updatedBlob = {
+				...existingBlob,
+				foodEaten: existingBlob.foodEaten + 1,
+			};
 			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? updatedBlob : blob,
 			);

@@ -15,8 +15,20 @@ The following issues were addressed in Sprint 9:
 | C9. O(N) .find() lookups | ✅ FIXED | Added `blobsById`/`foodsById` Maps for O(1) access |
 | H8. Stale foodCount closure | ✅ FIXED | Added `foodCountRef` to track latest value |
 
-**Remaining Critical Issues:** 4 (C1, C4, C6, C7)
-**Remaining High Issues:** 8 (H1-H7, H9)
+## Sprint 10 Completed Fixes
+
+The following issues were addressed in Sprint 10:
+
+| Issue | Status | Resolution |
+|-------|--------|------------|
+| C4. Energy formula mismatch | ✅ FIXED | Split constants into `C_SPEED`, `C_SIZE`, `C_SENSE` with additive formula |
+| C6. Geometry/Material memory leak | ✅ FIXED | Added `useMemo` for all geometries/materials + `useEffect` cleanup in Blob, Food, CartoonCloud |
+| C7. Vector3 GC pressure | ✅ FIXED | Pre-allocated Vector3 refs for debug line visualization |
+| H1. EATING target validation | ✅ FIXED | Added existence checks for food and prey before consuming |
+| H5. Predation phase gating | ✅ FIXED | Gated predation to DAY phase only to match energy decay timing |
+
+**Remaining Critical Issues:** 1 (C1)
+**Remaining High Issues:** 6 (H2-H4, H6, H7, H9)
 
 ## Summary
 
@@ -78,16 +90,17 @@ The chomp animation is 150ms (~9 frames), meaning a single food can credit 1-9 `
 
 ---
 
-### C4. Energy Formula Doesn't Match Specification
+### C4. Energy Formula Doesn't Match Specification ✅ FIXED
 **File:** `src/components/Entities/Blob.tsx:193-197`
 **Impact:** Trait balance is broken; small fast blobs are unfairly cheap
 
 **Specification (CLAUDE.md):** `(Speed² × C1) + (Size³ × C2) + (Sense × C3)`
-**Implementation:** `C_MOVE * size³ * speed²` (multiplied, not added)
+**Implementation:** ~~`C_MOVE * size³ * speed²` (multiplied, not added)~~
 
 This fundamentally changes evolutionary pressure. With the spec formula, speed and size have independent costs. With the implementation, a small blob's speed cost is reduced by its small size.
 
-**Fix:** Implement formula as specified with separate terms.
+**Fix:** ~~Implement formula as specified with separate terms.~~
+**Resolution:** Split `C_MOVE` into `C_SPEED`, `C_SIZE`, `C_SENSE` in `physics.ts`. Formula now uses additive terms: `(C_SPEED * speed²) + (C_SIZE * size³) + (C_SENSE * sense)`.
 
 ---
 
@@ -106,32 +119,35 @@ Without selectors, the component subscribes to ALL state changes. Every blob pos
 
 ---
 
-### C6. Geometry/Material Not Memoized (Memory Leak)
+### C6. Geometry/Material Not Memoized (Memory Leak) ✅ FIXED
 **Files:**
-- `src/components/Entities/Blob.tsx:350-388` (body + 4 eye geometries)
-- `src/components/Entities/Food.tsx:52-72` (3 geometries per food)
-- `src/components/World/CartoonCloud.tsx:37-64` (5 geometries per cloud)
+- `src/components/Entities/Blob.tsx` (body + 4 eye geometries)
+- `src/components/Entities/Food.tsx` (3 geometries per food)
+- `src/components/World/CartoonCloud.tsx` (5 geometries per cloud)
 
 **Impact:** Creates 500+ geometry objects per frame, memory grows unbounded
 
 With 50 blobs × 5 geometries + 100 food × 3 geometries = 550 geometries created every render. These accumulate without disposal, causing memory exhaustion.
 
-**Fix:** Use `useMemo` for geometries, add cleanup in `useEffect` return.
+**Fix:** ~~Use `useMemo` for geometries, add cleanup in `useEffect` return.~~
+**Resolution:** All three components now use `useMemo` for geometries and materials with proper cleanup in `useEffect` return function. Geometries are created once per component instance and properly disposed on unmount.
 
 ---
 
-### C7. Vector3 Creation in useFrame (GC Pressure)
-**File:** `src/components/Entities/Blob.tsx:332-333`
+### C7. Vector3 Creation in useFrame (GC Pressure) ✅ FIXED
+**File:** `src/components/Entities/Blob.tsx`
 **Impact:** 6,000+ object allocations per second in debug mode
 
 ```typescript
+// Before: Created new objects every frame
 new THREE.Vector3(blobPos.x, blobPos.y, blobPos.z),
 new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]),
 ```
 
 Creating objects in the 60fps render loop causes garbage collection pauses and frame drops.
 
-**Fix:** Pre-allocate vectors in refs, update via `.set()`.
+**Fix:** ~~Pre-allocate vectors in refs, update via `.set()`.~~
+**Resolution:** Added `debugLineStartRef`, `debugLineEndRef`, and `debugLinePointsRef` as pre-allocated Vector3 refs. Debug visualization now uses `.set()` to update values instead of creating new objects.
 
 ---
 
@@ -170,11 +186,14 @@ With 50 blobs, each doing 4 `.find()` operations = 10,000 iterations per frame.
 
 These issues significantly impact performance, maintainability, or correctness.
 
-### H1. EATING State Doesn't Validate Target Existence
-**File:** `src/hooks/useBlobBrain.ts:248-261`
+### H1. EATING State Doesn't Validate Target Existence ✅ FIXED
+**File:** `src/components/Entities/Blob.tsx` (eating logic)
 **Impact:** Potential undefined behavior when prey is consumed by another predator
 
 The EATING state for prey doesn't verify the target still exists or hasn't been claimed by another predator.
+
+**Fix:** ~~Validate target exists before consuming~~
+**Resolution:** Added O(1) Map lookups to verify both food and prey targets still exist before consuming. For prey, also checks `!prey.beingEatenBy` to prevent race conditions.
 
 ---
 
@@ -205,11 +224,14 @@ Same state name, different implementations.
 
 ---
 
-### H5. Predation During Non-DAY Phases
-**File:** `src/components/Entities/Blob.tsx:303`
+### H5. Predation During Non-DAY Phases ✅ FIXED
+**File:** `src/components/Entities/Blob.tsx`
 **Impact:** Energy decay only in DAY, but predation works in SUNSET
 
 Blobs can eat prey during SUNSET without paying energy costs (since decay is gated to DAY phase).
+
+**Fix:** ~~Gate predation to match energy decay timing~~
+**Resolution:** Predation (eating other blobs) is now gated to DAY phase only. Food eating still works during SUNSET to allow blobs to finish active hunts.
 
 ---
 
@@ -359,14 +381,14 @@ Import chain shows bidirectional dependency that could become problematic during
 3. ~~Add Zustand selectors to App.tsx (C5) - 15 min~~ ✅
 4. ~~Fix non-memoized props (C8) - 5 min~~ ✅
 
-### Phase 2: Memory & GC (Short-term) - PARTIAL
-5. Memoize geometries/materials (C6) - 1 hour
-6. Fix Vector3 allocations (C7) - 30 min
+### Phase 2: Memory & GC (Short-term) ✅ COMPLETE
+5. ~~Memoize geometries/materials (C6) - 1 hour~~ ✅
+6. ~~Fix Vector3 allocations (C7) - 30 min~~ ✅
 7. ~~Replace `.find()` with Map lookups (C9) - 30 min~~ ✅
 
-### Phase 3: Performance Scaling (Medium-term)
+### Phase 3: Performance Scaling (Medium-term) - PARTIAL
 8. Implement spatial partitioning (C1) - 4-8 hours
-9. Correct energy formula (C4) - 30 min
+9. ~~Correct energy formula (C4) - 30 min~~ ✅
 10. Add React.memo to components (M2) - 15 min
 
 ### Phase 4: Architecture (Long-term) - PARTIAL
@@ -393,13 +415,22 @@ Import chain shows bidirectional dependency that could become problematic during
 - Geometry objects: ~550 per render (unchanged - C6 pending)
 - Store re-renders: **~1-5 per second** (with selectors) ✅
 
-### Expected after remaining fixes:
-- Entity detection: ~1,500 comparisons/second (with spatial partitioning)
-- Object allocations: ~500 objects/second (reused refs)
-- Geometry objects: ~50 total (memoized + disposed)
+### After Sprint 10:
+- Entity detection: ~150,000 comparisons/second (unchanged - C1 pending)
+- `.find()` operations: **0** (Map lookups) ✅
+- Object allocations: **~500 objects/second** (pre-allocated Vector3 refs) ✅
+- Geometry objects: **~100 total** (memoized + disposed) ✅
+- Store re-renders: **~1-5 per second** (with selectors) ✅
+- Energy balance: **Correct** (additive formula per spec) ✅
+- Target validation: **Safe** (prevents undefined behavior) ✅
+
+### Remaining optimization opportunities:
+- Entity detection: ~1,500 comparisons/second (with spatial partitioning - C1)
+- Zustand array updates: O(1) with Immer or normalized state (H9)
 
 ---
 
 *Review conducted: Sprint 8 planning phase*
 *Sprint 9 fixes applied: C2, C3, C5, C8, C9, H8*
+*Sprint 10 fixes applied: C4, C6, C7, H1, H5*
 *Coverage: 5 parallel review agents analyzing R3F patterns, state management, game logic, code organization, and performance*

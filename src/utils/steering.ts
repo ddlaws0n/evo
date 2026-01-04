@@ -1,6 +1,21 @@
+import {
+	ARENA_RADIUS,
+	C_SENSE,
+	C_SIZE,
+	C_SPEED,
+	EAT_DISTANCE,
+	FLEE_FORCE,
+	HUNT_FORCE,
+	PREDATION_SIZE_RATIO,
+	RETURN_FORCE,
+	SOFT_BOUNDARY,
+	SOFT_RETURN_FORCE,
+	SPAWN_RADIUS,
+	WANDER_FORCE,
+} from "../constants/physics";
 import type { FoodEntity } from "../store/useGameStore";
 
-// Re-export constants from centralized location
+// Re-export constants for other modules that import from steering.ts
 export {
 	ARENA_RADIUS,
 	SOFT_BOUNDARY,
@@ -8,13 +23,14 @@ export {
 	WANDER_FORCE,
 	SOFT_RETURN_FORCE,
 	EAT_DISTANCE,
-	C_MOVE,
+	C_SPEED,
+	C_SIZE,
 	C_SENSE,
 	FLEE_FORCE,
 	RETURN_FORCE,
 	SPAWN_RADIUS,
 	PREDATION_SIZE_RATIO,
-} from "../constants/physics";
+};
 
 /**
  * Calculate 2D distance on the XZ plane (ignores Y axis)
