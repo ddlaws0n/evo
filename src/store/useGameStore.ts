@@ -27,6 +27,10 @@ interface GameState {
 	blobs: BlobEntity[];
 	foods: FoodEntity[];
 
+	// Entity lookup maps for O(1) access (C9 fix)
+	blobsById: Map<string, BlobEntity>;
+	foodsById: Map<string, FoodEntity>;
+
 	// Simulation state
 	day: number;
 	phase: SimulationPhase;
@@ -86,9 +90,20 @@ const generateFoodPosition = (radius: number): [number, number, number] => {
 	];
 };
 
+/**
+ * Build lookup map from entity array (C9 fix)
+ */
+const buildBlobMap = (blobs: BlobEntity[]): Map<string, BlobEntity> =>
+	new Map(blobs.map((b) => [b.id, b]));
+
+const buildFoodMap = (foods: FoodEntity[]): Map<string, FoodEntity> =>
+	new Map(foods.map((f) => [f.id, f]));
+
 export const useGameStore = create<GameState>((set) => ({
 	blobs: [],
 	foods: [],
+	blobsById: new Map(),
+	foodsById: new Map(),
 	day: 1,
 	phase: "DAY",
 	timeRemaining: 30,
@@ -114,6 +129,8 @@ export const useGameStore = create<GameState>((set) => ({
 		set({
 			blobs,
 			foods,
+			blobsById: buildBlobMap(blobs),
+			foodsById: buildFoodMap(foods),
 			day: 1,
 			phase: "DAY",
 			timeRemaining: 30,
@@ -122,41 +139,49 @@ export const useGameStore = create<GameState>((set) => ({
 	},
 
 	removeFood: (id: string) => {
-		set((state) => ({
-			foods: state.foods.filter((food) => food.id !== id),
-		}));
+		set((state) => {
+			const newFoods = state.foods.filter((food) => food.id !== id);
+			return {
+				foods: newFoods,
+				foodsById: buildFoodMap(newFoods),
+			};
+		});
 	},
 
 	updateBlobEnergy: (id: string, amount: number) => {
-		set((state) => ({
-			blobs: state.blobs.map((blob) =>
+		set((state) => {
+			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? { ...blob, energy: blob.energy + amount } : blob,
-			),
-		}));
+			);
+			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+		});
 	},
 
 	syncBlobPosition: (id: string, position: [number, number, number]) => {
-		set((state) => ({
-			blobs: state.blobs.map((blob) =>
+		set((state) => {
+			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? { ...blob, position } : blob,
-			),
-		}));
+			);
+			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+		});
 	},
 
 	incrementFoodEaten: (id: string) => {
-		set((state) => ({
-			blobs: state.blobs.map((blob) =>
+		set((state) => {
+			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? { ...blob, foodEaten: blob.foodEaten + 1 } : blob,
-			),
-		}));
+			);
+			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+		});
 	},
 
 	resetFoodEaten: (id: string) => {
-		set((state) => ({
-			blobs: state.blobs.map((blob) =>
+		set((state) => {
+			const newBlobs = state.blobs.map((blob) =>
 				blob.id === id ? { ...blob, foodEaten: 0 } : blob,
-			),
-		}));
+			);
+			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+		});
 	},
 
 	reproduceBlob: (
@@ -164,7 +189,8 @@ export const useGameStore = create<GameState>((set) => ({
 		currentPosition: [number, number, number],
 	) => {
 		set((state) => {
-			const parent = state.blobs.find((b) => b.id === parentId);
+			// Use Map lookup for O(1) access (C9 fix)
+			const parent = state.blobsById.get(parentId);
 			if (!parent) return state;
 
 			// Create mutated genome for baby
@@ -190,8 +216,10 @@ export const useGameStore = create<GameState>((set) => ({
 				beingEatenPosition: null,
 			};
 
+			const newBlobs = [...state.blobs, baby];
 			return {
-				blobs: [...state.blobs, baby],
+				blobs: newBlobs,
+				blobsById: buildBlobMap(newBlobs),
 			};
 		});
 	},
@@ -280,9 +308,12 @@ export const useGameStore = create<GameState>((set) => ({
 					`Reproduced: ${babies.length}`,
 			);
 
+			const newBlobs = [...survivors, ...babies];
 			return {
-				blobs: [...survivors, ...babies],
+				blobs: newBlobs,
 				foods: newFoods,
+				blobsById: buildBlobMap(newBlobs),
+				foodsById: buildFoodMap(newFoods),
 				day: state.day + 1,
 				phase: "DAY" as SimulationPhase,
 				timeRemaining: 30,
@@ -297,10 +328,14 @@ export const useGameStore = create<GameState>((set) => ({
 
 	removeBlob: (id: string) => {
 		logAsync(`💀 Blob removed | ID: ${id.slice(0, 8)}`);
-		set((state) => ({
-			blobs: state.blobs.filter((blob) => blob.id !== id),
-			deadThisDay: state.deadThisDay + 1,
-		}));
+		set((state) => {
+			const newBlobs = state.blobs.filter((blob) => blob.id !== id);
+			return {
+				blobs: newBlobs,
+				blobsById: buildBlobMap(newBlobs),
+				deadThisDay: state.deadThisDay + 1,
+			};
+		});
 	},
 
 	markBlobAsEaten: (
@@ -308,8 +343,8 @@ export const useGameStore = create<GameState>((set) => ({
 		predatorId: string,
 		predatorPosition: [number, number, number],
 	) => {
-		set((state) => ({
-			blobs: state.blobs.map((blob) =>
+		set((state) => {
+			const newBlobs = state.blobs.map((blob) =>
 				blob.id === preyId
 					? {
 							...blob,
@@ -317,7 +352,8 @@ export const useGameStore = create<GameState>((set) => ({
 							beingEatenPosition: predatorPosition,
 						}
 					: blob,
-			),
-		}));
+			);
+			return { blobs: newBlobs, blobsById: buildBlobMap(newBlobs) };
+		});
 	},
 }));

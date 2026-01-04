@@ -1,9 +1,9 @@
 import { usePlane } from "@react-three/cannon";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { ARENA_RADIUS } from "../../constants/physics";
 
-// Visual arena radius (the grassy meadow)
-const ARENA_RADIUS = 20;
+// Visual arena constants
 const ARENA_HEIGHT = 0.5;
 const DIRT_HEIGHT = 5;
 

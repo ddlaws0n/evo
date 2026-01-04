@@ -7,7 +7,7 @@ import { useBlobBrain } from "../../hooks/useBlobBrain";
 import { useGameStore } from "../../store/useGameStore";
 import { type Genome, getBlobColor } from "../../utils/genetics";
 import { logAsync } from "../../utils/logger";
-import { ARENA_RADIUS, C_MOVE, C_SENSE } from "../../utils/steering";
+import { ARENA_RADIUS, C_MOVE, C_SENSE } from "../../constants/physics";
 
 interface BlobProps {
 	id: string;
@@ -77,6 +77,9 @@ export function Blob({
 	// Debug line geometry (imperative updates, no re-renders)
 	const lineGeoRef = useRef<THREE.BufferGeometry>(null);
 
+	// Track consumed food/prey to prevent double-counting (C3 fix)
+	const consumedTargetsRef = useRef<Set<string>>(new Set());
+
 	// Physics body - dynamic sphere (size from genome)
 	const [ref, api] = useSphere<THREE.Group>(() => ({
 		mass: 1,
@@ -104,6 +107,8 @@ export function Blob({
 		const {
 			foods,
 			blobs,
+			blobsById,
+			foodsById,
 			phase,
 			timeRemaining,
 			removeFood,
@@ -119,8 +124,8 @@ export function Blob({
 		// ===================
 		// ABSORPTION ANIMATION (being eaten by predator)
 		// ===================
-		// Check if we've been marked as being eaten
-		const selfBlob = blobs.find((b) => b.id === id);
+		// Check if we've been marked as being eaten (C9: O(1) Map lookup)
+		const selfBlob = blobsById.get(id);
 		if (selfBlob?.beingEatenBy && !isBeingEatenRef.current) {
 			isBeingEatenRef.current = true;
 			absorptionTargetRef.current = selfBlob.beingEatenPosition
@@ -272,7 +277,13 @@ export function Blob({
 		// EATING LOGIC
 		// ===================
 		if (brainOutput.state === "EATING" && brainOutput.targetId) {
-			if (brainOutput.targetType === "food") {
+			// Check if we've already consumed this target (prevents double-counting)
+			const alreadyConsumed = consumedTargetsRef.current.has(brainOutput.targetId);
+
+			if (brainOutput.targetType === "food" && !alreadyConsumed) {
+				// Mark as consumed FIRST to prevent re-entry
+				consumedTargetsRef.current.add(brainOutput.targetId);
+
 				// Eating food
 				removeFood(brainOutput.targetId);
 
@@ -288,10 +299,13 @@ export function Blob({
 				// Trigger chomp animation
 				isChompingRef.current = true;
 				chompTimeRef.current = 0;
-			} else if (brainOutput.targetType === "blob") {
-				// Eating another blob (predation)
-				const prey = blobs.find((b) => b.id === brainOutput.targetId);
+			} else if (brainOutput.targetType === "blob" && !alreadyConsumed) {
+				// Eating another blob (predation) - C9: O(1) Map lookup
+				const prey = blobsById.get(brainOutput.targetId);
 				if (prey && !prey.beingEatenBy) {
+					// Mark as consumed FIRST to prevent re-entry
+					consumedTargetsRef.current.add(brainOutput.targetId);
+
 					// Mark prey as being eaten (triggers absorption animation on prey)
 					markBlobAsEaten(prey.id, id, [blobPos.x, blobPos.y, blobPos.z]);
 
@@ -316,14 +330,14 @@ export function Blob({
 		// DEBUG VISUALIZATION (Imperative Update)
 		// ===================
 		if (debugMode && brainOutput.state === "HUNTING" && brainOutput.targetId) {
-			// Find the target (food or blob) and update line geometry directly
+			// Find the target (food or blob) - C9: O(1) Map lookups
 			let targetPos: [number, number, number] | null = null;
 
 			if (brainOutput.targetType === "food") {
-				const targetFood = foods.find((f) => f.id === brainOutput.targetId);
+				const targetFood = foodsById.get(brainOutput.targetId);
 				if (targetFood) targetPos = targetFood.position;
 			} else if (brainOutput.targetType === "blob") {
-				const targetBlob = blobs.find((b) => b.id === brainOutput.targetId);
+				const targetBlob = blobsById.get(brainOutput.targetId);
 				if (targetBlob) targetPos = targetBlob.position;
 			}
 

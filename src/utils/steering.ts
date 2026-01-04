@@ -1,24 +1,20 @@
 import type { FoodEntity } from "../store/useGameStore";
 
-// Arena and physics constants
-export const ARENA_RADIUS = 17; // Hard boundary - will teleport back if exceeded
-export const SOFT_BOUNDARY = 14; // Soft boundary - start pushing back
-export const HUNT_FORCE = 4.0;
-export const WANDER_FORCE = 0.8;
-export const SOFT_RETURN_FORCE = 3.0;
-export const EAT_DISTANCE = 1.5;
-
-// Sprint 7: Energy system constants
-export const C_MOVE = 0.05; // Movement energy coefficient (size^3 * speed^2)
-export const C_SENSE = 0.003; // Sense energy coefficient
-
-// Sprint 7: Force constants
-export const FLEE_FORCE = 5.0; // Fleeing force (faster than hunt for survival)
-export const RETURN_FORCE = 4.0; // Return to edge force
-
-// Sprint 7: Spawn constants
-export const SPAWN_RADIUS = 16.5; // Edge spawn ring (between soft and hard boundary)
-export const PREDATION_SIZE_RATIO = 1.2; // Must be 20% larger to eat another blob
+// Re-export constants from centralized location
+export {
+	ARENA_RADIUS,
+	SOFT_BOUNDARY,
+	HUNT_FORCE,
+	WANDER_FORCE,
+	SOFT_RETURN_FORCE,
+	EAT_DISTANCE,
+	C_MOVE,
+	C_SENSE,
+	FLEE_FORCE,
+	RETURN_FORCE,
+	SPAWN_RADIUS,
+	PREDATION_SIZE_RATIO,
+} from "../constants/physics";
 
 /**
  * Calculate 2D distance on the XZ plane (ignores Y axis)

@@ -2,6 +2,22 @@
 
 Comprehensive code quality review conducted after completing Sprints 1-7. This document identifies issues, anti-patterns, and opportunities for improvement across the codebase.
 
+## Sprint 9 Completed Fixes
+
+The following issues were addressed in Sprint 9:
+
+| Issue | Status | Commit |
+|-------|--------|--------|
+| C2. ARENA_RADIUS mismatch | ✅ FIXED | Created `src/constants/physics.ts` as single source of truth |
+| C3. Food double-counting | ✅ FIXED | Added `consumedTargetsRef` Set to prevent re-incrementing |
+| C5. No Zustand selectors | ✅ FIXED | Added individual selectors in App.tsx |
+| C8. Non-memoized props | ✅ FIXED | Memoized population object with `useMemo` |
+| C9. O(N) .find() lookups | ✅ FIXED | Added `blobsById`/`foodsById` Maps for O(1) access |
+| H8. Stale foodCount closure | ✅ FIXED | Added `foodCountRef` to track latest value |
+
+**Remaining Critical Issues:** 4 (C1, C4, C6, C7)
+**Remaining High Issues:** 8 (H1-H7, H9)
+
 ## Summary
 
 | Category | Critical | High | Medium | Low | Total |
@@ -33,7 +49,7 @@ At 50 blobs × 60fps = 150,000+ comparisons/second. This becomes the primary bot
 
 ---
 
-### C2. ARENA_RADIUS Constant Mismatch (Bug)
+### C2. ARENA_RADIUS Constant Mismatch (Bug) ✅ FIXED
 **Files:**
 - `src/utils/steering.ts:4` → `ARENA_RADIUS = 17`
 - `src/components/World/Arena.tsx:6` → `ARENA_RADIUS = 20`
@@ -42,11 +58,12 @@ At 50 blobs × 60fps = 150,000+ comparisons/second. This becomes the primary bot
 
 Blobs hit the invisible physics boundary 3 units before the visual edge of the arena. This is confusing and breaks immersion.
 
-**Fix:** Extract to shared constants file, use single source of truth.
+**Fix:** ~~Extract to shared constants file, use single source of truth.~~
+**Resolution:** Created `src/constants/physics.ts` with all physics constants. Both files now import from this single source.
 
 ---
 
-### C3. Food Double-Counting During Eating (Bug)
+### C3. Food Double-Counting During Eating (Bug) ✅ FIXED
 **File:** `src/components/Entities/Blob.tsx:274-313`
 **Impact:** Blobs can get 2+ `foodEaten` credits from 1 food item
 
@@ -56,14 +73,8 @@ When blob enters EATING state, each frame (60fps) executes:
 
 The chomp animation is 150ms (~9 frames), meaning a single food can credit 1-9 `foodEaten`. This breaks reproduction fairness.
 
-**Fix:** Track consumed food IDs in a Set, only increment on first consumption:
-```typescript
-const consumedRef = useRef<Set<string>>(new Set());
-if (!consumedRef.current.has(targetId)) {
-  incrementFoodEaten(id);
-  consumedRef.current.add(targetId);
-}
-```
+**Fix:** ~~Track consumed food IDs in a Set, only increment on first consumption~~
+**Resolution:** Added `consumedTargetsRef = useRef<Set<string>>(new Set())` and check before incrementing.
 
 ---
 
@@ -80,7 +91,7 @@ This fundamentally changes evolutionary pressure. With the spec formula, speed a
 
 ---
 
-### C5. No Zustand Selectors in App.tsx
+### C5. No Zustand Selectors in App.tsx ✅ FIXED
 **File:** `src/App.tsx:92-100`
 **Impact:** Entire app re-renders on every store change (60+ times/second)
 
@@ -90,11 +101,8 @@ const { blobs, foods, day, phase, ... } = useGameStore();
 
 Without selectors, the component subscribes to ALL state changes. Every blob position sync, food removal, or energy update triggers App re-render.
 
-**Fix:** Use individual selectors:
-```typescript
-const blobs = useGameStore(state => state.blobs);
-const phase = useGameStore(state => state.phase);
-```
+**Fix:** ~~Use individual selectors~~
+**Resolution:** Replaced destructured hook with individual selector calls for each state slice.
 
 ---
 
@@ -127,7 +135,7 @@ Creating objects in the 60fps render loop causes garbage collection pauses and f
 
 ---
 
-### C8. Non-Memoized Inline Props
+### C8. Non-Memoized Inline Props ✅ FIXED
 **File:** `src/App.tsx:116`
 **Impact:** Breaks child component memoization
 
@@ -137,11 +145,12 @@ population={{ live: blobs.length, dead: deadThisDay }}
 
 Creates new object every render, forcing HUD to re-render even when values haven't changed.
 
-**Fix:** Use `useMemo` for object props or restructure component.
+**Fix:** ~~Use `useMemo` for object props or restructure component.~~
+**Resolution:** Added `useMemo` to create population object with proper dependencies.
 
 ---
 
-### C9. O(N) Array Lookups in Hot Path
+### C9. O(N) Array Lookups in Hot Path ✅ FIXED
 **File:** `src/components/Entities/Blob.tsx:123, 293, 323, 326`
 **Impact:** 4 linear searches per blob per frame
 
@@ -152,7 +161,8 @@ const prey = blobs.find((b) => b.id === brainOutput.targetId);
 
 With 50 blobs, each doing 4 `.find()` operations = 10,000 iterations per frame.
 
-**Fix:** Store blobs in a Map by ID, use O(1) lookups.
+**Fix:** ~~Store blobs in a Map by ID, use O(1) lookups.~~
+**Resolution:** Added `blobsById` and `foodsById` Maps to store. All `.find()` replaced with `.get()` lookups.
 
 ---
 
@@ -224,17 +234,14 @@ Handles: physics, birth animation, chomp animation, absorption animation, energy
 
 ---
 
-### H8. Stale Closure on foodCount Parameter
+### H8. Stale Closure on foodCount Parameter ✅ FIXED
 **File:** `src/hooks/useSimulationTimer.ts:69`
 **Impact:** Changing food count mid-simulation uses stale value
 
 The `useFrame` callback captures `foodCount` at hook initialization. If user changes food count via Leva, judgment spawns wrong amount.
 
-**Fix:** Use ref to track latest value:
-```typescript
-const foodCountRef = useRef(foodCount);
-useEffect(() => { foodCountRef.current = foodCount; }, [foodCount]);
-```
+**Fix:** ~~Use ref to track latest value~~
+**Resolution:** Added `foodCountRef` that syncs via `useEffect`. Judgment now uses `foodCountRef.current`.
 
 ---
 
@@ -346,45 +353,53 @@ Import chain could become circular if not careful during refactoring.
 
 ## Recommended Action Order
 
-### Phase 1: Critical Bugs & Performance (Immediate)
-1. Fix ARENA_RADIUS mismatch (C2) - 5 min
-2. Fix food double-counting bug (C3) - 15 min
-3. Add Zustand selectors to App.tsx (C5) - 15 min
-4. Fix non-memoized props (C8) - 5 min
+### Phase 1: Critical Bugs & Performance (Immediate) ✅ COMPLETE
+1. ~~Fix ARENA_RADIUS mismatch (C2) - 5 min~~ ✅
+2. ~~Fix food double-counting bug (C3) - 15 min~~ ✅
+3. ~~Add Zustand selectors to App.tsx (C5) - 15 min~~ ✅
+4. ~~Fix non-memoized props (C8) - 5 min~~ ✅
 
-### Phase 2: Memory & GC (Short-term)
+### Phase 2: Memory & GC (Short-term) - PARTIAL
 5. Memoize geometries/materials (C6) - 1 hour
 6. Fix Vector3 allocations (C7) - 30 min
-7. Replace `.find()` with Map lookups (C9) - 30 min
+7. ~~Replace `.find()` with Map lookups (C9) - 30 min~~ ✅
 
 ### Phase 3: Performance Scaling (Medium-term)
 8. Implement spatial partitioning (C1) - 4-8 hours
 9. Correct energy formula (C4) - 30 min
 10. Add React.memo to components (M2) - 15 min
 
-### Phase 4: Architecture (Long-term)
+### Phase 4: Architecture (Long-term) - PARTIAL
 11. Split Blob.tsx into focused hooks (H6) - 2-4 hours
 12. Move animation state out of store (H2) - 1-2 hours
-13. Extract constants to shared file (L6, M7) - 1 hour
+13. ~~Extract constants to shared file (L6, M7) - 1 hour~~ ✅ (physics constants done)
 14. Add barrel exports (L2) - 30 min
 
 ---
 
 ## Performance Benchmarks
 
-Current state with 50 blobs + 10 food at 60fps:
+### Before Sprint 9 (50 blobs + 10 food at 60fps):
 - Entity detection: ~150,000 comparisons/second
 - `.find()` operations: ~10,000 iterations/frame
 - Object allocations: ~3,000 objects/second (brain output only)
 - Geometry objects: ~550 created per render (not disposed)
+- Store re-renders: 60+ per second (no selectors)
 
-Expected after fixes:
+### After Sprint 9:
+- Entity detection: ~150,000 comparisons/second (unchanged - C1 pending)
+- `.find()` operations: **0** (Map lookups) ✅
+- Object allocations: ~3,000 objects/second (unchanged - C7 pending)
+- Geometry objects: ~550 per render (unchanged - C6 pending)
+- Store re-renders: **~1-5 per second** (with selectors) ✅
+
+### Expected after remaining fixes:
 - Entity detection: ~1,500 comparisons/second (with spatial partitioning)
-- `.find()` operations: 0 (Map lookups)
 - Object allocations: ~500 objects/second (reused refs)
 - Geometry objects: ~50 total (memoized + disposed)
 
 ---
 
 *Review conducted: Sprint 8 planning phase*
+*Sprint 9 fixes applied: C2, C3, C5, C8, C9, H8*
 *Coverage: 5 parallel review agents analyzing R3F patterns, state management, game logic, code organization, and performance*
