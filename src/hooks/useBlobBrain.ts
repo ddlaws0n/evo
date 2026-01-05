@@ -1,5 +1,9 @@
 import { useRef } from "react";
-import type { BlobEntity, FoodEntity } from "../store/useGameStore";
+import type {
+	BlobEntity,
+	FoodEntity,
+	SimulationPhase,
+} from "../store/useGameStore";
 import {
 	calculateBoundaryForce,
 	calculateSteeringForce,
@@ -70,6 +74,7 @@ export function useBlobBrain() {
 	 * @param wanderSeed Seed for wander behavior
 	 * @param speedMultiplier Genome speed trait (0.5-2.0) to scale forces
 	 * @param timeRemaining Seconds left in current day (for RETURNING trigger)
+	 * @param phase Current simulation phase (DAY, SUNSET, NIGHT)
 	 */
 	const tick = (
 		blobPos: { x: number; z: number },
@@ -81,8 +86,55 @@ export function useBlobBrain() {
 		wanderSeed: number,
 		speedMultiplier: number = 1.0,
 		timeRemaining: number = 30,
+		phase: SimulationPhase = "DAY",
 	): BrainOutput => {
 		const distanceFromCenter = Math.hypot(blobPos.x, blobPos.z);
+
+		// ===================
+		// SUNSET HARD OVERRIDE (Highest Priority)
+		// ===================
+		// During SUNSET, blobs MUST return home - no eating, no hunting, no fleeing
+		if (phase === "SUNSET") {
+			currentStateRef.current = "RETURNING";
+
+			// Full speed (ignore energy penalty) during SUNSET
+			const sunsetSpeedMultiplier = 1.0;
+
+			// Calculate return direction: toward edge (outward)
+			let returnDirection: { x: number; z: number };
+
+			if (distanceFromCenter < 0.1) {
+				// At center, pick random outward direction
+				const angle = wanderSeed; // Use wander seed for consistency
+				returnDirection = { x: Math.cos(angle), z: Math.sin(angle) };
+			} else {
+				// Head outward toward edge
+				returnDirection = {
+					x: blobPos.x / distanceFromCenter,
+					z: blobPos.z / distanceFromCenter,
+				};
+			}
+
+			// If already at edge, slow down
+			const atEdge = distanceFromCenter >= SPAWN_RADIUS - 1;
+			const returnForce = atEdge ? 0.5 : RETURN_FORCE * sunsetSpeedMultiplier;
+
+			const steeringVector = {
+				x: returnDirection.x * returnForce,
+				z: returnDirection.z * returnForce,
+			};
+
+			// No boundary force when RETURNING - let blob reach edge
+			return {
+				state: "RETURNING",
+				steeringVector,
+				boundaryVector: { x: 0, z: 0 },
+				totalForce: steeringVector,
+				targetId: null,
+				targetDistance: Number.POSITIVE_INFINITY,
+				targetType: null,
+			};
+		}
 
 		// ===================
 		// THREAT DETECTION (FLEEING)

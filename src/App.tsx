@@ -69,6 +69,9 @@ function GradientSkybox() {
 /**
  * SimulationController - Invisible component that runs the day/night timer
  * Lives inside Physics world to access useFrame
+ *
+ * PERFORMANCE: Only takes foodCount as prop. Timer hook reads foods/blobs
+ * via getState() inside useFrame to avoid triggering React re-renders.
  */
 function SimulationController({ foodCount }: { foodCount: number }) {
 	useSimulationTimer(foodCount);

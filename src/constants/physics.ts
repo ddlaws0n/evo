@@ -23,3 +23,8 @@ export const PREDATION_SIZE_RATIO = 1.2; // Must be 20% larger to eat another bl
 export const C_SPEED = 0.02; // Speed energy coefficient (speed²)
 export const C_SIZE = 0.005; // Size energy coefficient (size³) - reduced to enable large predators
 export const C_SENSE = 0.015; // Sense energy coefficient (sense) - increased for trade-off
+
+// SUNSET phase constants
+export const EDGE_THRESHOLD = SPAWN_RADIUS - 1; // Distance to trigger "at edge" detection (15.5 units)
+export const SUNSET_FAILSAFE_MS = 10000; // Max SUNSET duration in milliseconds (10 seconds)
+export const FAST_FORWARD_MULTIPLIER = 5; // Speed multiplier when all food is consumed

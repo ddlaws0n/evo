@@ -8,6 +8,7 @@ import {
 	C_SENSE,
 	C_SIZE,
 	C_SPEED,
+	EDGE_THRESHOLD,
 } from "../../constants/physics";
 import { useBlobBrain } from "../../hooks/useBlobBrain";
 import {
@@ -178,6 +179,9 @@ export function Blob({
 	// Track consumed food/prey to prevent double-counting (C3 fix)
 	const consumedTargetsRef = useRef<Set<string>>(new Set());
 
+	// SUNSET edge detection latch - prevents double-counting when blob reaches edge
+	const hasReportedHomeRef = useRef<boolean>(false);
+
 	// Physics body - dynamic sphere (size from genome)
 	const [ref, api] = useSphere<THREE.Group>(() => ({
 		mass: 1,
@@ -214,6 +218,7 @@ export function Blob({
 			syncBlobPosition,
 			incrementFoodEaten,
 			markBlobAsEaten,
+			markBlobAtEdge,
 			getNearbyBlobIds,
 			getNearbyFoodIds,
 		} = useGameStore.getState();
@@ -296,8 +301,11 @@ export function Blob({
 		// ===================
 		// ENERGY DECAY (Sprint 7)
 		// ===================
-		// Only decay energy during DAY phase (respects pause via adjustedDelta)
-		if (phase === "DAY" && adjustedDelta > 0) {
+		// Pause energy decay during SUNSET to prevent death during return journey
+		if (phase === "SUNSET") {
+			// No energy decay during SUNSET
+		} else if (phase === "DAY" && adjustedDelta > 0) {
+			// Only decay energy during DAY phase (respects pause via adjustedDelta)
 			const { size, speed, sense } = genome;
 			// Formula: Cost = (C_SPEED * speed²) + (C_SIZE * size³) + (C_SENSE * sense)
 			// Separate additive terms ensure each trait has independent cost (C4 fix)
@@ -374,6 +382,7 @@ export function Blob({
 			wanderSeed,
 			genome.speed,
 			timeRemaining,
+			phase,
 		);
 
 		// ===================
@@ -459,6 +468,22 @@ export function Blob({
 				isChompingRef.current = true;
 				chompTimeRef.current = 0;
 			}
+		}
+
+		// ===================
+		// SUNSET EDGE DETECTION (with latch to prevent double-counting)
+		// ===================
+		if (phase === "SUNSET" && !hasReportedHomeRef.current) {
+			// Check if blob has reached the edge
+			if (distanceFromCenter >= EDGE_THRESHOLD) {
+				hasReportedHomeRef.current = true;
+				markBlobAtEdge(id);
+			}
+		}
+
+		// Reset latch when new day starts
+		if (phase === "DAY" && hasReportedHomeRef.current) {
+			hasReportedHomeRef.current = false;
 		}
 
 		// ===================
