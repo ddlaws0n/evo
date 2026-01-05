@@ -91,20 +91,16 @@ function App() {
 	// Simulation controls from store
 	const isPaused = useGameStore((state) => state.isPaused);
 	const simulationSpeed = useGameStore((state) => state.simulationSpeed);
-	const togglePause = useGameStore((state) => state.togglePause);
 	const setSimulationSpeed = useGameStore((state) => state.setSimulationSpeed);
 	const maxGeneration = useGameStore((state) => state.maxGeneration);
 	const history = useGameStore((state) => state.history);
-	const fittestBlobId = useGameStore((state) => state.fittestBlobId);
 
 	// Simulation controls via Leva
 	useControls("Simulation", {
 		paused: {
 			value: isPaused,
 			label: "Paused (Space)",
-			onChange: (v) => {
-				if (v !== isPaused) togglePause();
-			},
+			onChange: (v) => useGameStore.setState({ isPaused: v }),
 		},
 		speed: {
 			value: simulationSpeed,
@@ -141,12 +137,12 @@ function App() {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.code === "Space" && e.target === document.body) {
 				e.preventDefault();
-				togglePause();
+				useGameStore.setState((state) => ({ isPaused: !state.isPaused }));
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [togglePause]);
+	}, []);
 
 	return (
 		<div style={{ width: "100vw", height: "100vh", position: "relative" }}>
@@ -236,7 +232,6 @@ function App() {
 							position={blob.position}
 							genome={blob.genome}
 							debugMode={debugMode}
-							isFittest={blob.id === fittestBlobId}
 						/>
 					))}
 

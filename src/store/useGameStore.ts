@@ -72,14 +72,10 @@ interface GameState {
 	// Sprint 8: Simulation controls
 	isPaused: boolean;
 	simulationSpeed: number;
-	selectedBlobId: string | null;
 
 	// Sprint 8: Evolution history
 	history: DaySnapshot[];
 	maxGeneration: number;
-
-	// Sprint 8: Fittest blob tracking
-	fittestBlobId: string | null;
 
 	// Actions
 	setupSimulation: (blobCount: number, foodCount: number) => void;
@@ -111,7 +107,6 @@ interface GameState {
 	// Sprint 8: Simulation controls
 	togglePause: () => void;
 	setSimulationSpeed: (speed: number) => void;
-	selectBlob: (id: string | null) => void;
 	// Sprint 8: Statistics helpers
 	getPopulationStats: () => {
 		avgSpeed: number;
@@ -122,7 +117,6 @@ interface GameState {
 		maxSense: number;
 		maxGeneration: number;
 	};
-	updateFittestBlob: () => void;
 }
 
 /**
@@ -175,11 +169,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 	// Sprint 8: Simulation controls
 	isPaused: false,
 	simulationSpeed: 1,
-	selectedBlobId: null,
 	// Sprint 8: Evolution history
 	history: [],
 	maxGeneration: 1,
-	fittestBlobId: null,
 
 	setupSimulation: (blobCount: number, foodCount: number) => {
 		const blobs: BlobEntity[] = Array.from({ length: blobCount }, () => ({
@@ -218,10 +210,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 			deadThisDay: 0,
 			// Reset Sprint 8 state
 			isPaused: false,
-			selectedBlobId: null,
 			history: [],
 			maxGeneration: 1,
-			fittestBlobId: null,
 		});
 	},
 
@@ -395,9 +385,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 			const senses = liveBlobs.map((b) => b.genome.sense);
 			const generations = liveBlobs.map((b) => b.generation);
 
-			const avgSpeed = population > 0 ? speeds.reduce((a, b) => a + b, 0) / population : 0;
-			const avgSize = population > 0 ? sizes.reduce((a, b) => a + b, 0) / population : 0;
-			const avgSense = population > 0 ? senses.reduce((a, b) => a + b, 0) / population : 0;
+			const avgSpeed =
+				population > 0 ? speeds.reduce((a, b) => a + b, 0) / population : 0;
+			const avgSize =
+				population > 0 ? sizes.reduce((a, b) => a + b, 0) / population : 0;
+			const avgSense =
+				population > 0 ? senses.reduce((a, b) => a + b, 0) / population : 0;
 			const maxSpeed = population > 0 ? Math.max(...speeds) : 0;
 			const maxSize = population > 0 ? Math.max(...sizes) : 0;
 			const maxSense = population > 0 ? Math.max(...senses) : 0;
@@ -494,20 +487,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 				...newBlobs.map((b) => b.generation),
 			);
 
-			// Calculate fittest blob in new population
-			let fittestId: string | null = null;
-			if (newBlobs.length > 0) {
-				let maxFitness = -Infinity;
-				for (const blob of newBlobs) {
-					const fitness =
-						(blob.genome.speed + blob.genome.sense) / blob.genome.size;
-					if (fitness > maxFitness) {
-						maxFitness = fitness;
-						fittestId = blob.id;
-					}
-				}
-			}
-
 			return {
 				blobs: newBlobs,
 				foods: newFoods,
@@ -521,7 +500,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 				deadThisDay: 0,
 				history: [...state.history, snapshot],
 				maxGeneration: newMaxGen,
-				fittestBlobId: fittestId,
 			};
 		});
 	},
@@ -596,10 +574,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 		set({ simulationSpeed: speed });
 	},
 
-	selectBlob: (id: string | null) => {
-		set({ selectedBlobId: id });
-	},
-
 	// ===================
 	// SPRINT 8: Statistics Helpers
 	// ===================
@@ -635,30 +609,5 @@ export const useGameStore = create<GameState>((set, get) => ({
 			maxSense: Math.max(...senses),
 			maxGeneration: Math.max(...generations),
 		};
-	},
-
-	updateFittestBlob: () => {
-		const state = get();
-		const blobs = state.blobs.filter((b) => !b.beingEatenBy);
-
-		if (blobs.length === 0) {
-			set({ fittestBlobId: null });
-			return;
-		}
-
-		// Fitness = (speed + sense) / size - rewards fast sensors, penalizes size
-		let fittestId = blobs[0].id;
-		let maxFitness = -Infinity;
-
-		for (const blob of blobs) {
-			const fitness =
-				(blob.genome.speed + blob.genome.sense) / blob.genome.size;
-			if (fitness > maxFitness) {
-				maxFitness = fitness;
-				fittestId = blob.id;
-			}
-		}
-
-		set({ fittestBlobId: fittestId });
 	},
 }));

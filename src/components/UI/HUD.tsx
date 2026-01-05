@@ -71,18 +71,24 @@ export function HUD({
 				</div>
 			</div>
 
-			{/* Bottom Left - Evolution Stats */}
-			<div style={{ ...styles.panel, ...styles.bottomLeft }}>
-				<span style={styles.label}>Evolution</span>
-				<div style={styles.statsGrid}>
-					<span style={styles.statLabel}>Gen</span>
-					<span style={styles.statValue}>{maxGeneration}</span>
-					<span style={styles.statLabel}>Spd</span>
-					<span style={styles.statValue}>{latestStats.avgSpeed.toFixed(2)}</span>
-					<span style={styles.statLabel}>Sns</span>
-					<span style={styles.statValue}>{latestStats.avgSense.toFixed(1)}</span>
+			{/* Bottom Left - Evolution Stats (hidden until first judgment completes) */}
+			{history.length > 0 && (
+				<div style={{ ...styles.panel, ...styles.bottomLeft }}>
+					<span style={styles.label}>Evolution</span>
+					<div style={styles.statsGrid}>
+						<span style={styles.statLabel}>Gen</span>
+						<span style={styles.statValue}>{maxGeneration}</span>
+						<span style={styles.statLabel}>Spd</span>
+						<span style={styles.statValue}>
+							{latestStats.avgSpeed.toFixed(2)}
+						</span>
+						<span style={styles.statLabel}>Sns</span>
+						<span style={styles.statValue}>
+							{latestStats.avgSense.toFixed(1)}
+						</span>
+					</div>
 				</div>
-			</div>
+			)}
 
 			{/* Bottom Right - Mini Chart (visual indicator of trait trends) */}
 			{history.length > 1 && (
@@ -119,7 +125,12 @@ function MiniChart({ history }: { history: DaySnapshot[] }) {
 		.join(" ");
 
 	return (
-		<svg width={width} height={height} style={{ display: "block" }}>
+		<svg
+			width={width}
+			height={height}
+			style={{ display: "block" }}
+			aria-hidden="true"
+		>
 			<polyline
 				points={points}
 				fill="none"
