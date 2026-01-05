@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import { useMemo } from "react";
 import type { DaySnapshot } from "../../store/useGameStore";
 
 interface HUDProps {
@@ -29,13 +28,8 @@ export function HUD({
 	// Format time as seconds with one decimal
 	const timeDisplay = Math.max(0, timeRemaining).toFixed(1);
 
-	// Get latest stats from history or defaults
-	const latestStats = useMemo(() => {
-		if (history.length === 0) {
-			return { avgSpeed: 0, avgSize: 0, avgSense: 0 };
-		}
-		return history[history.length - 1];
-	}, [history]);
+	// Get latest stats from history (only used when history.length > 0)
+	const latestStats = history[history.length - 1];
 
 	return (
 		<div style={styles.container}>
@@ -72,7 +66,7 @@ export function HUD({
 			</div>
 
 			{/* Bottom Left - Evolution Stats (hidden until first judgment completes) */}
-			{history.length > 0 && (
+			{latestStats && (
 				<div style={{ ...styles.panel, ...styles.bottomLeft }}>
 					<span style={styles.label}>Evolution</span>
 					<div style={styles.statsGrid}>
