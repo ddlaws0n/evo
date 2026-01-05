@@ -81,11 +81,35 @@ function SimulationController({ foodCount }: { foodCount: number }) {
  * Physics runs with realistic gravity
  */
 function App() {
-	// God Mode Controls
+	// God Mode Controls - Start with founder population (few blobs, abundant food)
 	const { blobCount, foodCount, debugMode } = useControls("God Mode", {
-		blobCount: { value: 5, min: 0, max: 50, step: 1, label: "Blob Count" },
-		foodCount: { value: 10, min: 0, max: 100, step: 1, label: "Food Count" },
+		blobCount: { value: 3, min: 0, max: 50, step: 1, label: "Blob Count" },
+		foodCount: { value: 20, min: 0, max: 100, step: 1, label: "Food Count" },
 		debugMode: { value: false, label: "Debug Mode" },
+	});
+
+	// Simulation controls from store
+	const isPaused = useGameStore((state) => state.isPaused);
+	const simulationSpeed = useGameStore((state) => state.simulationSpeed);
+	const setSimulationSpeed = useGameStore((state) => state.setSimulationSpeed);
+	const maxGeneration = useGameStore((state) => state.maxGeneration);
+	const history = useGameStore((state) => state.history);
+
+	// Simulation controls via Leva
+	useControls("Simulation", {
+		paused: {
+			value: isPaused,
+			label: "Paused (Space)",
+			onChange: (v) => useGameStore.setState({ isPaused: v }),
+		},
+		speed: {
+			value: simulationSpeed,
+			min: 0.25,
+			max: 4,
+			step: 0.25,
+			label: "Speed",
+			onChange: (v) => setSimulationSpeed(v),
+		},
 	});
 
 	// Game state from store - using selectors to prevent unnecessary re-renders (C5 fix)
@@ -108,13 +132,33 @@ function App() {
 		setupSimulation(blobCount, foodCount);
 	}, [blobCount, foodCount, setupSimulation]);
 
+	// Keyboard shortcuts
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.code === "Space" && e.target === document.body) {
+				e.preventDefault();
+				useGameStore.setState((state) => ({ isPaused: !state.isPaused }));
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, []);
+
 	return (
 		<div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 			{/* Night Overlay - Fades in during night phase */}
 			<NightOverlay phase={phase} />
 
 			{/* HUD Overlay - HTML layer */}
-			<HUD day={day} timeRemaining={timeRemaining} population={population} />
+			<HUD
+				day={day}
+				timeRemaining={timeRemaining}
+				population={population}
+				isPaused={isPaused}
+				simulationSpeed={simulationSpeed}
+				maxGeneration={maxGeneration}
+				history={history}
+			/>
 
 			<Canvas
 				shadows

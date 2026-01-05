@@ -17,8 +17,8 @@ const SPEED_RANGE: [number, number] = [0.5, 2.0];
 const SIZE_RANGE: [number, number] = [0.3, 1.0];
 const SENSE_RANGE: [number, number] = [3.0, 15.0];
 
-// Mutation magnitude (±5%)
-const MUTATION_RANGE = 0.05;
+// Mutation magnitude (±10% for faster observable evolution)
+const MUTATION_RANGE = 0.1;
 
 /**
  * Clamp a value between min and max

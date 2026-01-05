@@ -30,12 +30,25 @@ export function useSimulationTimer(foodCount: number) {
 	}, [foodCount]);
 
 	useFrame((_, delta) => {
-		const { phase, setTimeRemaining, startSunset, startNight, runJudgment } =
-			useGameStore.getState();
+		const {
+			phase,
+			isPaused,
+			simulationSpeed,
+			setTimeRemaining,
+			startSunset,
+			startNight,
+			runJudgment,
+		} = useGameStore.getState();
+
+		// Skip if paused
+		if (isPaused) return;
+
+		// Apply simulation speed to delta
+		const adjustedDelta = delta * simulationSpeed;
 
 		if (phase === "DAY") {
-			// Countdown during day
-			timeRef.current -= delta;
+			// Countdown during day (uses adjusted delta for speed control)
+			timeRef.current -= adjustedDelta;
 
 			// Sync to store every second
 			const currentSecond = Math.ceil(timeRef.current);
@@ -53,8 +66,8 @@ export function useSimulationTimer(foodCount: number) {
 				sunsetTimerRef.current = 0;
 			}
 		} else if (phase === "SUNSET") {
-			// Count up during sunset
-			sunsetTimerRef.current += delta;
+			// Count up during sunset (uses adjusted delta for speed control)
+			sunsetTimerRef.current += adjustedDelta;
 
 			// Update display (counts down 3→0)
 			const sunsetTimeRemaining = SUNSET_DURATION - sunsetTimerRef.current;
@@ -67,8 +80,8 @@ export function useSimulationTimer(foodCount: number) {
 				nightTimerRef.current = 0;
 			}
 		} else if (phase === "NIGHT") {
-			// Wait for night transition
-			nightTimerRef.current += delta;
+			// Wait for night transition (uses adjusted delta for speed control)
+			nightTimerRef.current += adjustedDelta;
 
 			if (nightTimerRef.current >= NIGHT_DURATION) {
 				// Run judgment and reset to DAY (use ref for latest value)

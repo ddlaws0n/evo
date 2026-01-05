@@ -34,7 +34,7 @@ const ABSORPTION_DURATION = 0.3; // Sprint 7: prey absorption animation
 
 // Energy settings
 const ENERGY_FOOD_GAIN = 40; // Energy gained from eating food
-const ENERGY_PREY_MULTIPLIER = 50; // Energy gained = prey.size * this multiplier
+const ENERGY_PREY_MULTIPLIER = 80; // Energy gained = prey.size * this (buffed to make predation viable)
 
 // Original blob radius the eye positions were designed for
 const BASE_RADIUS = 0.5;
@@ -207,6 +207,8 @@ export function Blob({
 			foodsById,
 			phase,
 			timeRemaining,
+			isPaused,
+			simulationSpeed,
 			removeFood,
 			removeBlob,
 			syncBlobPosition,
@@ -215,6 +217,9 @@ export function Blob({
 			getNearbyBlobIds,
 			getNearbyFoodIds,
 		} = useGameStore.getState();
+
+		// Skip if paused (but still allow animations to run)
+		const adjustedDelta = isPaused ? 0 : delta * simulationSpeed;
 
 		// Use subscribed physics position (more accurate than mesh position)
 		const blobPos = physicsPosition.current;
@@ -291,15 +296,15 @@ export function Blob({
 		// ===================
 		// ENERGY DECAY (Sprint 7)
 		// ===================
-		// Only decay energy during DAY phase
-		if (phase === "DAY") {
+		// Only decay energy during DAY phase (respects pause via adjustedDelta)
+		if (phase === "DAY" && adjustedDelta > 0) {
 			const { size, speed, sense } = genome;
 			// Formula: Cost = (C_SPEED * speed²) + (C_SIZE * size³) + (C_SENSE * sense)
 			// Separate additive terms ensure each trait has independent cost (C4 fix)
 			// Multiply by 60 to normalize for 60fps (delta is ~0.016 at 60fps)
 			const energyCost =
 				(C_SPEED * speed ** 2 + C_SIZE * size ** 3 + C_SENSE * sense) *
-				delta *
+				adjustedDelta *
 				60;
 			energyRef.current -= energyCost;
 
@@ -372,23 +377,30 @@ export function Blob({
 		);
 
 		// ===================
-		// APPLY FORCES
+		// APPLY FORCES (only when not paused)
 		// ===================
-		// EXHAUSTION PENALTY: Sluggish movement if starving
-		if (energyRef.current <= 0) {
-			brainOutput.totalForce.x *= 0.2;
-			brainOutput.totalForce.z *= 0.2;
+		if (!isPaused) {
+			// EXHAUSTION PENALTY: Sluggish movement if starving
+			if (energyRef.current <= 0) {
+				brainOutput.totalForce.x *= 0.2;
+				brainOutput.totalForce.z *= 0.2;
+			}
+
+			// Scale forces by simulation speed
+			api.applyForce(
+				[
+					brainOutput.totalForce.x * simulationSpeed,
+					0,
+					brainOutput.totalForce.z * simulationSpeed,
+				],
+				[0, 0, 0],
+			);
 		}
 
-		api.applyForce(
-			[brainOutput.totalForce.x, 0, brainOutput.totalForce.z],
-			[0, 0, 0],
-		);
-
 		// ===================
-		// EATING LOGIC
+		// EATING LOGIC (only when not paused)
 		// ===================
-		if (brainOutput.state === "EATING" && brainOutput.targetId) {
+		if (!isPaused && brainOutput.state === "EATING" && brainOutput.targetId) {
 			// Check if we've already consumed this target (prevents double-counting)
 			const alreadyConsumed = consumedTargetsRef.current.has(
 				brainOutput.targetId,
