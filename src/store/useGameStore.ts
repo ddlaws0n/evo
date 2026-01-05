@@ -24,11 +24,29 @@ export interface BlobEntity {
 	// Sprint 7: Predation state
 	beingEatenBy: string | null;
 	beingEatenPosition: [number, number, number] | null;
+	// Sprint 8: Generation tracking
+	generation: number;
+	parentId: string | null;
 }
 
 export interface FoodEntity {
 	id: string;
 	position: [number, number, number];
+}
+
+// Day snapshot for history tracking
+export interface DaySnapshot {
+	day: number;
+	population: number;
+	births: number;
+	deaths: number;
+	avgSpeed: number;
+	avgSize: number;
+	avgSense: number;
+	maxSpeed: number;
+	maxSize: number;
+	maxSense: number;
+	maxGeneration: number;
 }
 
 interface GameState {
@@ -50,6 +68,15 @@ interface GameState {
 	timeRemaining: number;
 	dayDuration: number;
 	deadThisDay: number;
+
+	// Sprint 8: Simulation controls
+	isPaused: boolean;
+	simulationSpeed: number;
+	selectedBlobId: string | null;
+
+	// Sprint 8: Evolution history
+	history: DaySnapshot[];
+	maxGeneration: number;
 
 	// Actions
 	setupSimulation: (blobCount: number, foodCount: number) => void;
@@ -78,6 +105,20 @@ interface GameState {
 	// Spatial grid queries (C1 fix)
 	getNearbyBlobIds: (x: number, z: number, radius: number) => string[];
 	getNearbyFoodIds: (x: number, z: number, radius: number) => string[];
+	// Sprint 8: Simulation controls
+	togglePause: () => void;
+	setSimulationSpeed: (speed: number) => void;
+	selectBlob: (id: string | null) => void;
+	// Sprint 8: Statistics helpers
+	getPopulationStats: () => {
+		avgSpeed: number;
+		avgSize: number;
+		avgSense: number;
+		maxSpeed: number;
+		maxSize: number;
+		maxSense: number;
+		maxGeneration: number;
+	};
 }
 
 /**
@@ -127,6 +168,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 	timeRemaining: 30,
 	dayDuration: 30,
 	deadThisDay: 0,
+	// Sprint 8: Simulation controls
+	isPaused: false,
+	simulationSpeed: 1,
+	selectedBlobId: null,
+	// Sprint 8: Evolution history
+	history: [],
+	maxGeneration: 1,
 
 	setupSimulation: (blobCount: number, foodCount: number) => {
 		const blobs: BlobEntity[] = Array.from({ length: blobCount }, () => ({
@@ -137,11 +185,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 			foodEaten: 0,
 			beingEatenBy: null,
 			beingEatenPosition: null,
+			generation: 1,
+			parentId: null,
 		}));
 
 		const foods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
 			id: uuidv4(),
-			position: generateFoodPosition(12), // Center area
+			position: generateFoodPosition(14), // Wider spawn area for less crowding
 		}));
 
 		// Build spatial grids
@@ -161,6 +211,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 			phase: "DAY",
 			timeRemaining: 30,
 			deadThisDay: 0,
+			// Reset Sprint 8 state
+			isPaused: false,
+			selectedBlobId: null,
+			history: [],
+			maxGeneration: 1,
 		});
 	},
 
@@ -270,6 +325,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 				currentPosition[2] + Math.sin(angle) * offset,
 			];
 
+			const babyGeneration = parent.generation + 1;
 			const baby: BlobEntity = {
 				id: uuidv4(),
 				position: babyPosition,
@@ -278,6 +334,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 				foodEaten: 0,
 				beingEatenBy: null,
 				beingEatenPosition: null,
+				generation: babyGeneration,
+				parentId: parent.id,
 			};
 
 			const newBlobs = [...state.blobs, baby];
@@ -286,9 +344,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 			newBlobsById.set(baby.id, baby);
 			// Add to spatial grid
 			gridInsert(state.blobGrid, baby.id, baby.position);
+			// Update max generation
+			const newMaxGeneration = Math.max(state.maxGeneration, babyGeneration);
 			return {
 				blobs: newBlobs,
 				blobsById: newBlobsById,
+				maxGeneration: newMaxGeneration,
 			};
 		});
 	},
@@ -320,6 +381,22 @@ export const useGameStore = create<GameState>((set, get) => ({
 
 	runJudgment: (foodCount: number) => {
 		set((state) => {
+			// Calculate statistics BEFORE judgment for history
+			const liveBlobs = state.blobs.filter((b) => !b.beingEatenBy);
+			const population = liveBlobs.length;
+			const speeds = liveBlobs.map((b) => b.genome.speed);
+			const sizes = liveBlobs.map((b) => b.genome.size);
+			const senses = liveBlobs.map((b) => b.genome.sense);
+			const generations = liveBlobs.map((b) => b.generation);
+
+			const avgSpeed = population > 0 ? speeds.reduce((a, b) => a + b, 0) / population : 0;
+			const avgSize = population > 0 ? sizes.reduce((a, b) => a + b, 0) / population : 0;
+			const avgSense = population > 0 ? senses.reduce((a, b) => a + b, 0) / population : 0;
+			const maxSpeed = population > 0 ? Math.max(...speeds) : 0;
+			const maxSize = population > 0 ? Math.max(...sizes) : 0;
+			const maxSense = population > 0 ? Math.max(...senses) : 0;
+			const maxGen = population > 0 ? Math.max(...generations) : 0;
+
 			const survivors: BlobEntity[] = [];
 			const babies: BlobEntity[] = [];
 
@@ -340,7 +417,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 						beingEatenPosition: null,
 					});
 
-					// Create baby with mutated genome
+					// Create baby with mutated genome and generation tracking
 					const babyGenome = mutate(blob.genome);
 					babies.push({
 						id: uuidv4(),
@@ -350,6 +427,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 						foodEaten: 0,
 						beingEatenBy: null,
 						beingEatenPosition: null,
+						generation: blob.generation + 1,
+						parentId: blob.id,
 					});
 				} else {
 					// SURVIVE: Ate exactly 1 food
@@ -364,17 +443,36 @@ export const useGameStore = create<GameState>((set, get) => ({
 				}
 			}
 
-			// Generate new food batch in center
+			// Calculate deaths and births
+			const deaths = state.blobs.length - survivors.length;
+			const births = babies.length;
+
+			// Generate new food batch (wider spawn area)
 			const newFoods: FoodEntity[] = Array.from({ length: foodCount }, () => ({
 				id: uuidv4(),
-				position: generateFoodPosition(12),
+				position: generateFoodPosition(14),
 			}));
+
+			// Create history snapshot
+			const snapshot: DaySnapshot = {
+				day: state.day,
+				population,
+				births,
+				deaths,
+				avgSpeed,
+				avgSize,
+				avgSense,
+				maxSpeed,
+				maxSize,
+				maxSense,
+				maxGeneration: maxGen,
+			};
 
 			// Log judgment results
 			logAsync(
 				`📊 JUDGMENT | Survivors: ${survivors.length} | ` +
-					`Died: ${state.blobs.length - survivors.length - babies.length} | ` +
-					`Reproduced: ${babies.length}`,
+					`Died: ${deaths} | Reproduced: ${births} | ` +
+					`Gen: ${maxGen} | Avg Speed: ${avgSpeed.toFixed(2)}`,
 			);
 
 			const newBlobs = [...survivors, ...babies];
@@ -383,6 +481,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 			const foodGrid = createSpatialGrid(5);
 			rebuildGrid(blobGrid, newBlobs);
 			rebuildGrid(foodGrid, newFoods);
+
+			// Calculate new max generation (include babies)
+			const newMaxGen = Math.max(
+				state.maxGeneration,
+				...newBlobs.map((b) => b.generation),
+			);
 
 			return {
 				blobs: newBlobs,
@@ -395,6 +499,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 				phase: "DAY" as SimulationPhase,
 				timeRemaining: 30,
 				deadThisDay: 0,
+				history: [...state.history, snapshot],
+				maxGeneration: newMaxGen,
 			};
 		});
 	},
@@ -455,5 +561,58 @@ export const useGameStore = create<GameState>((set, get) => ({
 	getNearbyFoodIds: (x: number, z: number, radius: number) => {
 		const state = get();
 		return gridQueryRadius(state.foodGrid, x, z, radius);
+	},
+
+	// ===================
+	// SPRINT 8: Simulation Controls
+	// ===================
+
+	togglePause: () => {
+		set((state) => ({ isPaused: !state.isPaused }));
+	},
+
+	setSimulationSpeed: (speed: number) => {
+		set({ simulationSpeed: speed });
+	},
+
+	selectBlob: (id: string | null) => {
+		set({ selectedBlobId: id });
+	},
+
+	// ===================
+	// SPRINT 8: Statistics Helpers
+	// ===================
+
+	getPopulationStats: () => {
+		const state = get();
+		const blobs = state.blobs.filter((b) => !b.beingEatenBy);
+		const population = blobs.length;
+
+		if (population === 0) {
+			return {
+				avgSpeed: 0,
+				avgSize: 0,
+				avgSense: 0,
+				maxSpeed: 0,
+				maxSize: 0,
+				maxSense: 0,
+				maxGeneration: 0,
+			};
+		}
+
+		const speeds = blobs.map((b) => b.genome.speed);
+		const sizes = blobs.map((b) => b.genome.size);
+		const senses = blobs.map((b) => b.genome.sense);
+		const generations = blobs.map((b) => b.generation);
+
+		return {
+			avgSpeed: speeds.reduce((a, b) => a + b, 0) / population,
+			avgSize: sizes.reduce((a, b) => a + b, 0) / population,
+			avgSense: senses.reduce((a, b) => a + b, 0) / population,
+			maxSpeed: Math.max(...speeds),
+			maxSize: Math.max(...sizes),
+			maxSense: Math.max(...senses),
+			maxGeneration: Math.max(...generations),
+		};
 	},
 }));

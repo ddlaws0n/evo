@@ -21,5 +21,5 @@ export const PREDATION_SIZE_RATIO = 1.2; // Must be 20% larger to eat another bl
 
 // Energy system constants (formula: C_SPEED * speed² + C_SIZE * size³ + C_SENSE * sense)
 export const C_SPEED = 0.02; // Speed energy coefficient (speed²)
-export const C_SIZE = 0.015; // Size energy coefficient (size³)
-export const C_SENSE = 0.005; // Sense energy coefficient (sense)
+export const C_SIZE = 0.005; // Size energy coefficient (size³) - reduced to enable large predators
+export const C_SENSE = 0.015; // Sense energy coefficient (sense) - increased for trade-off
