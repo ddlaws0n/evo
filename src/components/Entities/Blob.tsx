@@ -23,6 +23,7 @@ interface BlobProps {
 	position?: Triplet;
 	genome: Genome;
 	debugMode?: boolean;
+	isFittest?: boolean;
 }
 
 // Animation settings
@@ -54,6 +55,7 @@ export function Blob({
 	position = [0, 2, 0],
 	genome,
 	debugMode = false,
+	isFittest = false,
 }: BlobProps) {
 	// Visual group ref (for scaling body + eyes together during animations)
 	const visualGroupRef = useRef<THREE.Group>(null);
@@ -514,6 +516,23 @@ export function Blob({
 					/>
 				</group>
 			</group>
+
+			{/* Fittest Crown - Golden ring above the fittest blob */}
+			{isFittest && (
+				<mesh
+					position={[0, genome.size + 0.3, 0]}
+					rotation={[Math.PI / 2, 0, 0]}
+				>
+					<torusGeometry args={[genome.size * 0.6, 0.05, 8, 24]} />
+					<meshStandardMaterial
+						color="#fbbf24"
+						emissive="#f59e0b"
+						emissiveIntensity={0.5}
+						metalness={0.8}
+						roughness={0.2}
+					/>
+				</mesh>
+			)}
 
 			{/* Debug Line - Shows target when hunting (imperative updates) */}
 			{debugMode && (

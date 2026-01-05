@@ -95,6 +95,7 @@ function App() {
 	const setSimulationSpeed = useGameStore((state) => state.setSimulationSpeed);
 	const maxGeneration = useGameStore((state) => state.maxGeneration);
 	const history = useGameStore((state) => state.history);
+	const fittestBlobId = useGameStore((state) => state.fittestBlobId);
 
 	// Simulation controls via Leva
 	useControls("Simulation", {
@@ -235,6 +236,7 @@ function App() {
 							position={blob.position}
 							genome={blob.genome}
 							debugMode={debugMode}
+							isFittest={blob.id === fittestBlobId}
 						/>
 					))}
 
