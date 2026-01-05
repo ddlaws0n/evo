@@ -1,9 +1,12 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
+import {
+	FAST_FORWARD_MULTIPLIER,
+	SUNSET_FAILSAFE_MS,
+} from "../constants/physics";
 import { useGameStore } from "../store/useGameStore";
 
 const DAY_DURATION = 30; // seconds
-const SUNSET_DURATION = 3; // seconds - matches brain RETURNING trigger
 const NIGHT_DURATION = 2; // seconds for fade transition
 
 /**
@@ -12,24 +15,28 @@ const NIGHT_DURATION = 2; // seconds for fade transition
  * Runs at 60fps via useFrame, tracks time via ref (not state).
  * Only syncs to store at key thresholds to avoid performance issues.
  *
+ * PERFORMANCE: Reads foods/blobs/blobsAtEdge via getState() inside useFrame
+ * to avoid triggering React re-renders on every position update.
+ *
  * Flow:
- * 1. DAY phase: countdown from 30s to 0
- * 2. At 0s: trigger NIGHT phase
- * 3. After 2s fade: run judgment and start new DAY
+ * 1. DAY phase: countdown from 30s to 0 (fast-forward if food gone)
+ * 2. At 0s: trigger SUNSET phase
+ * 3. SUNSET: wait for all blobs to reach edge (no timer, failsafe at 10s)
+ * 4. NIGHT: 2s fade, then run judgment and start new DAY
  */
 export function useSimulationTimer(foodCount: number) {
 	const timeRef = useRef(DAY_DURATION);
-	const sunsetTimerRef = useRef(0);
 	const nightTimerRef = useRef(0);
 	const lastSyncedTimeRef = useRef(DAY_DURATION);
 
-	// Track latest foodCount to avoid stale closure (H8 fix)
+	// Track latest foodCount to avoid stale closure
 	const foodCountRef = useRef(foodCount);
 	useEffect(() => {
 		foodCountRef.current = foodCount;
 	}, [foodCount]);
 
 	useFrame((_, delta) => {
+		// PERFORMANCE: Read all state via getState() to avoid React re-renders
 		const {
 			phase,
 			isPaused,
@@ -38,16 +45,25 @@ export function useSimulationTimer(foodCount: number) {
 			startSunset,
 			startNight,
 			runJudgment,
+			sunsetStartTime,
+			foods,
+			blobs,
+			blobsAtEdge,
 		} = useGameStore.getState();
 
 		// Skip if paused
 		if (isPaused) return;
 
 		// Apply simulation speed to delta
-		const adjustedDelta = delta * simulationSpeed;
+		let adjustedDelta = delta * simulationSpeed;
 
 		if (phase === "DAY") {
-			// Countdown during day (uses adjusted delta for speed control)
+			// Fast-forward if all food is gone
+			if (foods.length === 0) {
+				adjustedDelta *= FAST_FORWARD_MULTIPLIER;
+			}
+
+			// Countdown during day
 			timeRef.current -= adjustedDelta;
 
 			// Sync to store every second
@@ -58,22 +74,25 @@ export function useSimulationTimer(foodCount: number) {
 				lastSyncedTimeRef.current = timeRef.current;
 			}
 
-			// Trigger SUNSET when 3 seconds remain
-			if (timeRef.current <= 3) {
-				timeRef.current = 3; // Freeze at 3
-				setTimeRemaining(3);
+			// Trigger SUNSET when timer hits 0
+			if (timeRef.current <= 0) {
+				timeRef.current = 0;
+				setTimeRemaining(0);
 				startSunset();
-				sunsetTimerRef.current = 0;
 			}
 		} else if (phase === "SUNSET") {
-			// Count up during sunset (uses adjusted delta for speed control)
-			sunsetTimerRef.current += adjustedDelta;
+			// No countdown - wait for all blobs to reach edge
+			// Calculate alive blob count (exclude blobs being eaten)
+			const aliveBlobCount = blobs.filter((b) => !b.beingEatenBy).length;
 
-			// Update display (counts down 3→0)
-			const sunsetTimeRemaining = SUNSET_DURATION - sunsetTimerRef.current;
-			setTimeRemaining(Math.max(0, sunsetTimeRemaining));
+			// Check if all alive blobs are at edge
+			const allBlobsHome = blobsAtEdge >= aliveBlobCount;
 
-			if (sunsetTimerRef.current >= SUNSET_DURATION) {
+			// Failsafe: if SUNSET has been running for too long, force transition
+			const sunsetElapsed = Date.now() - sunsetStartTime;
+			const failsafeTriggered = sunsetElapsed > SUNSET_FAILSAFE_MS;
+
+			if (allBlobsHome || failsafeTriggered || aliveBlobCount === 0) {
 				// Transition to NIGHT
 				setTimeRemaining(0);
 				startNight();
@@ -89,7 +108,6 @@ export function useSimulationTimer(foodCount: number) {
 				timeRef.current = DAY_DURATION;
 				lastSyncedTimeRef.current = DAY_DURATION;
 				nightTimerRef.current = 0;
-				sunsetTimerRef.current = 0;
 			}
 		}
 	});

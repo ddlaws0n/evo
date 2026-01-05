@@ -69,6 +69,10 @@ interface GameState {
 	dayDuration: number;
 	deadThisDay: number;
 
+	// SUNSET tracking state
+	blobsAtEdge: number; // Count of blobs that reached edge during SUNSET
+	sunsetStartTime: number; // Timestamp when SUNSET began (for failsafe)
+
 	// Sprint 8: Simulation controls
 	isPaused: boolean;
 	simulationSpeed: number;
@@ -94,6 +98,7 @@ interface GameState {
 	startNight: () => void;
 	startDay: () => void;
 	runJudgment: (foodCount: number) => void;
+	markBlobAtEdge: (id: string) => void; // Called when blob reaches edge during SUNSET
 	// Sprint 7: Death and predation
 	removeBlob: (id: string) => void;
 	markBlobAsEaten: (
@@ -166,6 +171,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 	timeRemaining: 30,
 	dayDuration: 30,
 	deadThisDay: 0,
+	// SUNSET tracking state
+	blobsAtEdge: 0,
+	sunsetStartTime: 0,
 	// Sprint 8: Simulation controls
 	isPaused: false,
 	simulationSpeed: 1,
@@ -208,6 +216,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 			phase: "DAY",
 			timeRemaining: 30,
 			deadThisDay: 0,
+			// Reset SUNSET tracking state
+			blobsAtEdge: 0,
+			sunsetStartTime: 0,
 			// Reset Sprint 8 state
 			isPaused: false,
 			history: [],
@@ -360,7 +371,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
 	startSunset: () => {
 		logAsync("🌅 SUNSET | Blobs returning home...");
-		set({ phase: "SUNSET" });
+		set({ phase: "SUNSET", sunsetStartTime: Date.now() });
 	},
 
 	startNight: () => {
@@ -371,8 +382,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 	startDay: () => {
 		set((state) => {
 			logAsync(`☀️ DAY ${state.day} START | Population: ${state.blobs.length}`);
-			return { phase: "DAY", timeRemaining: 30, deadThisDay: 0 };
+			return {
+				phase: "DAY",
+				timeRemaining: 30,
+				deadThisDay: 0,
+				blobsAtEdge: 0, // Reset for new day
+			};
 		});
+	},
+
+	markBlobAtEdge: (_id: string) => {
+		set((state) => ({
+			blobsAtEdge: state.blobsAtEdge + 1,
+		}));
 	},
 
 	runJudgment: (foodCount: number) => {
